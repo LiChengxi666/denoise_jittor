@@ -1,0 +1,9 @@
+results/
+datalist/
+dataset_test_noisy/
+dataset_train/
+*.zip
+experiments/
+*.pyc
+dataset_test_noisy.zip
+dataset_train.tar.gz
