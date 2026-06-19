@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jittor / training caches and logs
+.cache/
+*.log
+
+# Competition datasets
+dataset_train/
+dataset_test_noisy/
+test_gt/
+
+# Training and prediction outputs
+starter_code/experiments/
+starter_code/tmp_predict/
+starter_code/result.zip
+result.zip
+
+# Model checkpoints and generated point clouds
+*.pkl
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

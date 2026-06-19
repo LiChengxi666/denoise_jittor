@@ -1,0 +1,15 @@
+__target__: VelocityModule
+frame_knn: 24
+num_train_points: 512
+feat_embedding_dim: 384
+decoder_hidden_dim: 256
+dsm_sigma: 0.01
+target_mode: mix
+cd_loss_enabled: True
+cd_loss_sample_points: 512
+denoise_inner_steps: 4
+predict_step_size: 0.8
+predict_patch_size: 1200
+predict_seed_k: 6
+predict_seed_k_alpha: 1
+predict_num_steps: 2

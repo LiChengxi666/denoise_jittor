@@ -1,0 +1,22 @@
+mode: train
+debug: False
+
+components:
+  data: train_strong
+  transform: vm_strong
+  system: vm_strong
+  model: vm_strong
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.2
+
+optimizer:
+  __target__: adam
+  lr: 0.00003
+
+trainer:
+  epochs: 150
+  save_every: 10
+  save_best: True
+  save_last: True
