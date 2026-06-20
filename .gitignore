@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyc
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -19,12 +20,15 @@ env/
 dataset_train/
 dataset_test_noisy/
 test_gt/
+datalist/
 
 # Training and prediction outputs
 starter_code/experiments/
 starter_code/tmp_predict/
 starter_code/result.zip
 result.zip
+results/
+experiments/
 
 # Model checkpoints and generated point clouds
 *.pkl
