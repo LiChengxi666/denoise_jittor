@@ -42,8 +42,11 @@ class AugmentSample(Augment):
             faces=asset.faces,
             num_samples=self.num_samples,
             num_vertex_samples=self.num_vertex_samples,
+            vertex_normals=asset.vertex_normals,
+            face_normals=asset.face_normals,
         )
         asset.sampled_vertices = sampled_vertices
+        asset.sampled_normals = sampled_normals
 
 @dataclass(frozen=True)
 class AugmentNormalizePC(Augment):
@@ -155,6 +158,7 @@ class AugmentPatch(Augment):
     def apply(self, asset: Asset, **kwargs):
         pc = asset.sampled_vertices
         pc_noisy = asset.sampled_vertices_noisy
+        pc_clean_normal = asset.sampled_normals
         
         assert pc is not None
         assert pc_noisy is not None
@@ -170,6 +174,7 @@ class AugmentPatch(Augment):
 
         pat_A = pc_noisy[nn_idx]  # (P, M, 3)
         pat_B = pc[nn_idx]        # (P, M, 3)
+        pat_N = None if pc_clean_normal is None else pc_clean_normal[nn_idx]
 
         l1, l2 = 1e-8, 1.0
         t = np.random.rand(num_patches, self.patch_size, 1)
@@ -190,6 +195,8 @@ class AugmentPatch(Augment):
         asset.meta['pc_noisy'] = pat_A
         asset.meta['pc_clean'] = pat_B
         asset.meta['pc_mix'] = pat_t
+        if pat_N is not None:
+            asset.meta['pc_clean_normal'] = pat_N
 
 def get_augments(*args) -> List[Augment]:
     MAP = {

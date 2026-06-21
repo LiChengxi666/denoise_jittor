@@ -21,6 +21,7 @@ class DatasetConfig(ConfigSpec):
     batch_size: int
     num_workers: int
     datapath: Datapath
+    extra_attrs: Optional[Dict]
     
     @classmethod
     def parse(cls, **kwargs) -> 'DatasetConfig':
@@ -30,6 +31,7 @@ class DatasetConfig(ConfigSpec):
             batch_size=kwargs.get('batch_size', 1),
             num_workers=kwargs.get('num_workers', 0),
             datapath=Datapath.parse(**kwargs.get('datapath')), # type: ignore
+            extra_attrs=kwargs.get('extra_attrs', None),
         )
     
     def split_by_cls(self) -> Dict[Optional[str], 'DatasetConfig']:
@@ -41,6 +43,7 @@ class DatasetConfig(ConfigSpec):
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 datapath=v,
+                extra_attrs=self.extra_attrs,
             )
         return res
 
@@ -157,6 +160,7 @@ class PCDatasetModule():
                 shuffle=config.shuffle,
                 num_workers=config.num_workers,
                 drop_last=False,
+                **(config.extra_attrs or {}),
             )
             return dataset
         if isinstance(dataset, Dict):

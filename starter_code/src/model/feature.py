@@ -63,13 +63,15 @@ class DynamicEdgeConv(EdgeConv):
         return super().execute(x, edge_index)
 
 class FeatureExtraction(nn.Module):
-    def __init__(self, k=32, input_dim=0, embedding_dim=512, distance_estimation=False):
+    def __init__(self, k=32, input_dim=0, embedding_dim=512, distance_estimation=False, global_feat=False):
         super().__init__()
 
         self.k = k
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
+        self.output_dim = embedding_dim * (2 if global_feat else 1)
         self.distance_estimation = distance_estimation
+        self.global_feat = global_feat
 
         self.conv1 = DynamicEdgeConv(self.input_dim, embedding_dim // 8)
         self.conv2 = DynamicEdgeConv(embedding_dim // 8, embedding_dim // 4)
@@ -135,7 +137,12 @@ class FeatureExtraction(nn.Module):
         
         x3 = self.conv3(x_combined_flat, edge_index)
         x3 = x3.reshape(B, N, -1)
-        
+
+        if self.global_feat:
+            x_global = jt.max(x3, dim=1, keepdims=True)
+            x_global = x_global.broadcast((B, N, x3.shape[-1]))
+            x3 = jt.concat([x3, x_global], dim=-1)
+
         return x3
 
 class Decoder(nn.Module):

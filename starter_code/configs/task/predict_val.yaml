@@ -3,12 +3,12 @@ debug: False
 load_ckpt: experiments/vm_strong/checkpoint_best.pkl
 
 components:
-  data: predict
+  data: predict_val
   transform: predict
   system: vm
   model: vm_strong
 
 writer:
   __target__: vm
-  save_dir: tmp_predict
+  save_dir: tmp_predict_val
   save_name: denoised

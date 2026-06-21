@@ -34,12 +34,13 @@ Usage:
 """
 
 import argparse
+import csv
 import glob
+import json
 import os
 import sys
 import time
 from multiprocessing import Pool, cpu_count
-from functools import partial
 
 import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='point_cloud_utils')
@@ -87,7 +88,20 @@ def load_mesh_vf(path):
             mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
         return np.array(mesh.vertices, dtype=np.float64), np.array(mesh.faces, dtype=np.int32)
     except ImportError:
-        return None, None
+        vertices = []
+        faces = []
+        with open(path, "r") as f:
+            for line in f:
+                if line.startswith("v "):
+                    vertices.append([float(x) for x in line.split()[1:4]])
+                elif line.startswith("f "):
+                    face = []
+                    for tok in line.split()[1:4]:
+                        face.append(int(tok.split("/")[0]) - 1)
+                    faces.append(face)
+        if not vertices or not faces:
+            return None, None
+        return np.asarray(vertices, dtype=np.float64), np.asarray(faces, dtype=np.int32)
 
 
 # ======================== 归一化 ========================
@@ -128,7 +142,7 @@ def chamfer_distance(pc_a, pc_b, normalize=True):
 
 # ======================== Point-to-Surface ========================
 
-def point_to_surface_distance(pc, mesh_v, mesh_f, normalize_ref_pc=None):
+def point_to_surface_distance(pc, mesh_v, mesh_f, normalize_ref_pc=None, mesh_center=None, mesh_scale=None):
     """
     P2S: 每个点到网格表面最近距离²的均值。
     使用 point_cloud_utils (pcu) 的 closest_points_on_mesh（基于 BVH 加速）。
@@ -141,7 +155,12 @@ def point_to_surface_distance(pc, mesh_v, mesh_f, normalize_ref_pc=None):
 
     vertices = mesh_v.copy()
 
-    if normalize_ref_pc is not None:
+    if mesh_center is not None and mesh_scale is not None:
+        scale = float(mesh_scale)
+        if scale < 1e-12:
+            return 0.0
+        vertices = (vertices - np.asarray(mesh_center, dtype=np.float64)) / scale
+    elif normalize_ref_pc is not None:
         center = (normalize_ref_pc.max(axis=0) + normalize_ref_pc.min(axis=0)) / 2.0
         centered = normalize_ref_pc - center
         scale = np.sqrt((centered ** 2).sum(axis=1)).max()
@@ -199,11 +218,21 @@ def find_meshes(mesh_dir, data_name='models/model_normalized.obj'):
     return meshes
 
 
+def load_meta(meta_dir, key):
+    if not meta_dir:
+        return None
+    path = os.path.join(meta_dir, key, "meta.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        return json.load(f)
+
+
 # ======================== 单样本评测（用于并行） ========================
 
 def evaluate_single(args_tuple):
     """评测单个样本，返回 (key, cd_pred, cd_noisy, cd_score, p2s_pred, p2s_noisy, p2s_score)"""
-    key, pred_path, gt_path, noisy_path, mesh_path = args_tuple
+    key, pred_path, gt_path, noisy_path, mesh_path, p2s_normalize, meta = args_tuple
 
     pc_pred = load_pointcloud(pred_path)
     pc_gt = load_pointcloud(gt_path)
@@ -219,8 +248,22 @@ def evaluate_single(args_tuple):
     if mesh_path is not None:
         mv, mf = load_mesh_vf(mesh_path)
         if mv is not None:
-            p2s_pred_val = point_to_surface_distance(pc_pred, mv, mf, normalize_ref_pc=pc_gt)
-            p2s_noisy_val = point_to_surface_distance(pc_noisy, mv, mf, normalize_ref_pc=pc_gt)
+            if p2s_normalize == "none":
+                p2s_pred_val = point_to_surface_distance(pc_pred, mv, mf)
+                p2s_noisy_val = point_to_surface_distance(pc_noisy, mv, mf)
+            elif p2s_normalize == "meta":
+                if meta is not None:
+                    center = meta.get("normalize_center")
+                    scale = meta.get("normalize_scale")
+                    p2s_pred_val = point_to_surface_distance(
+                        pc_pred, mv, mf, mesh_center=center, mesh_scale=scale
+                    )
+                    p2s_noisy_val = point_to_surface_distance(
+                        pc_noisy, mv, mf, mesh_center=center, mesh_scale=scale
+                    )
+            else:
+                p2s_pred_val = point_to_surface_distance(pc_pred, mv, mf, normalize_ref_pc=pc_gt)
+                p2s_noisy_val = point_to_surface_distance(pc_noisy, mv, mf, normalize_ref_pc=pc_gt)
             if p2s_pred_val is not None and p2s_noisy_val is not None:
                 p2s_s = metric_to_score(p2s_pred_val, p2s_noisy_val)
 
@@ -239,6 +282,10 @@ def main():
                         help='含噪点云目录')
     parser.add_argument('--mesh_dir', type=str, default='',
                         help='原始网格目录（用于 P2S，可选）')
+    parser.add_argument('--meta_dir', type=str, default='',
+                        help='验证集 meta 目录；配合 --p2s_normalize meta 使用')
+    parser.add_argument('--p2s_normalize', choices=['ref_gt', 'meta', 'none'], default='ref_gt',
+                        help='P2S 坐标对齐方式：ref_gt=旧逻辑，meta=使用 make_validation_set 保存的原始归一化参数，none=不归一化')
     parser.add_argument('--mesh_data_name', type=str, default='models/model_normalized.obj',
                         help='网格文件相对于 model_id 的路径')
     parser.add_argument('--pred_filename', type=str, default='denoised.npy')
@@ -246,6 +293,8 @@ def main():
     parser.add_argument('--noisy_filename', type=str, default='noisy.npy')
     parser.add_argument('--workers', type=int, default=0,
                         help='并行进程数 (0=自动检测 CPU 核数)')
+    parser.add_argument('--csv_path', type=str, default='',
+                        help='可选：输出逐样本 CD/P2S/score 明细 CSV')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -261,7 +310,10 @@ def main():
     noisy_samples = find_samples(args.noisy_dir, args.noisy_filename)
     mesh_samples = find_meshes(args.mesh_dir, args.mesh_data_name) if use_p2s else {}
 
-    print(f"加速后端: CD=scipy.cKDTree, P2S={'pcu (BVH)' if HAS_PCU else 'cKDTree (vertex approx)'}, workers={n_workers}")
+    print(
+        f"加速后端: CD=scipy.cKDTree, P2S={'pcu (BVH)' if HAS_PCU else 'cKDTree (vertex approx)'}, "
+        f"workers={n_workers}, p2s_normalize={args.p2s_normalize}"
+    )
 
     common_keys = sorted(set(pred_samples.keys()) & set(gt_samples.keys()) & set(noisy_samples.keys()))
 
@@ -276,9 +328,23 @@ def main():
 
     # 构建任务列表
     tasks = []
+    missing_meta = 0
     for key in common_keys:
         mesh_path = mesh_samples.get(key) if use_p2s else None
-        tasks.append((key, pred_samples[key], gt_samples[key], noisy_samples[key], mesh_path))
+        meta = load_meta(args.meta_dir, key) if args.p2s_normalize == "meta" else None
+        if args.p2s_normalize == "meta" and meta is None:
+            missing_meta += 1
+        tasks.append((
+            key,
+            pred_samples[key],
+            gt_samples[key],
+            noisy_samples[key],
+            mesh_path,
+            args.p2s_normalize,
+            meta,
+        ))
+    if missing_meta:
+        print(f"警告：{missing_meta} 个样本缺少 meta.json，这些样本将无法计算 meta 对齐 P2S。")
 
     print(f"开始评测 {len(tasks)} 个样本...")
     t0 = time.time()
@@ -297,6 +363,7 @@ def main():
     cd_noisys = []
     p2s_preds = []
     p2s_noisys = []
+    rows = []
 
     for key, cd_pred, cd_noisy, cd_s, p2s_pred, p2s_noisy, p2s_s in results:
         cd_scores.append(cd_s)
@@ -311,6 +378,16 @@ def main():
             if p2s_s is not None:
                 msg += f"  P2S_score={p2s_s:.2f}"
             print(msg)
+        rows.append({
+            "key": key,
+            "cd_pred": cd_pred,
+            "cd_noisy": cd_noisy,
+            "cd_score": cd_s,
+            "p2s_pred": "" if p2s_pred is None else p2s_pred,
+            "p2s_noisy": "" if p2s_noisy is None else p2s_noisy,
+            "p2s_score": "" if p2s_s is None else p2s_s,
+            "final_score": cd_s if p2s_s is None else 0.5 * cd_s + 0.5 * p2s_s,
+        })
 
     # 为缺失样本记 0 分
     for key in missing_pred:
@@ -330,6 +407,18 @@ def main():
         final_score = mean_cd_score
 
     elapsed = time.time() - t0
+
+    if args.csv_path:
+        os.makedirs(os.path.dirname(args.csv_path) or ".", exist_ok=True)
+        with open(args.csv_path, "w", newline="") as f:
+            fieldnames = [
+                "key", "cd_pred", "cd_noisy", "cd_score",
+                "p2s_pred", "p2s_noisy", "p2s_score", "final_score",
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"逐样本明细已写入: {args.csv_path}")
 
     # 输出
     print("\n" + "=" * 65)

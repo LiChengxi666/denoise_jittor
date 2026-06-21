@@ -1,0 +1,21 @@
+mode: train
+debug: False
+
+components:
+  data: train
+  transform: vm
+  system: vm
+  model: vm
+
+loss:
+  loss: 1.0
+
+optimizer:
+  __target__: adam
+  lr: 0.00003
+
+trainer:
+  epochs: 150
+  save_every: 10
+  save_best: True
+  save_last: True

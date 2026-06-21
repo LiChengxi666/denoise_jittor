@@ -1,12 +1,12 @@
 mode: predict
 debug: False
-load_ckpt: experiments/vm_strong/checkpoint_best.pkl
+load_ckpt: experiments/vm/checkpoint_best.pkl
 
 components:
   data: predict
   transform: predict
   system: vm
-  model: vm_strong
+  model: vm
 
 writer:
   __target__: vm

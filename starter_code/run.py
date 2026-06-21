@@ -10,6 +10,7 @@ from tqdm import tqdm
 from typing import Dict, List
 
 import argparse
+import copy
 import numpy as np
 import os
 import random
@@ -45,6 +46,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--seed", type=int, required=False, default=123)
+    parser.add_argument("--log_dir", type=str, required=False, default=None)
+    parser.add_argument("--experiment_name", type=str, required=False, default=None)
+    parser.add_argument("--ckpt_dir", type=str, required=False, default=None)
     args = parser.parse_args()
     
     # seed all
@@ -88,9 +92,11 @@ if __name__ == "__main__":
     model_config = components.get('model', None)
     if model_config is None:
         model = None
+        model_config_snapshot = None
     else:
         model_config = load('model', os.path.join('configs/model', model_config))
-        model = get_model(model_config=model_config, transform_config=transform_config)
+        model_config_snapshot = copy.deepcopy(model_config)
+        model = get_model(model_config=copy.deepcopy(model_config), transform_config=transform_config)
     
     train_transform = (Transform.parse(**transform_config.get('train_transform', {}))) if model is None else model.get_train_transform()
     validate_transform = (Transform.parse(**transform_config.get('validate_transform', {}))) if model is None else model.get_validate_transform()
@@ -109,6 +115,14 @@ if __name__ == "__main__":
     optimizer_config = task.get('optimizer', None)
     loss_config = task.get('loss', None)
     trainer_config = task.get('trainer', None)
+    if trainer_config is None:
+        trainer_config = {}
+    else:
+        trainer_config = copy.deepcopy(trainer_config)
+    if args.log_dir is not None:
+        trainer_config['log_dir'] = args.log_dir
+    if args.experiment_name is not None:
+        trainer_config['experiment_name'] = args.experiment_name
     
     # load ckpt
     load_ckpt = task.get('load_ckpt', None)
@@ -123,6 +137,21 @@ if __name__ == "__main__":
     system_config = components.get('system', None)
     if system_config is not None:
         system_config = load('system', os.path.join('configs/system', system_config))
+        system_config_snapshot = copy.deepcopy(system_config)
+        if args.ckpt_dir is not None:
+            system_config['ckpt_save_dir'] = args.ckpt_dir
+            system_config_snapshot['ckpt_save_dir'] = args.ckpt_dir
+        config_snapshot = {
+            "args": vars(args),
+            "task": task,
+            "data": data_config,
+            "transform": transform_config,
+            "model": model_config_snapshot,
+            "system": system_config_snapshot,
+            "optimizer": optimizer_config,
+            "loss": loss_config,
+            "trainer": trainer_config,
+        }
         system = get_system(
             dataset_module=dataset_module,
             model=model,
@@ -130,6 +159,7 @@ if __name__ == "__main__":
             loss_config=loss_config,
             trainer_config=trainer_config,
             writer=get_writer(**writer_config) if writer_config is not None else None,
+            config_snapshot=config_snapshot,
             **system_config,
         )
     else:

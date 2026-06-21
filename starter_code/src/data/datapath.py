@@ -32,8 +32,10 @@ class ObjLazyAsset(LazyAsset):
         asset = Asset(
             path=self.path,
             cls=self.cls,
-            vertices=np.array(mesh.vertices), # type: ignore
+            vertices=np.array(mesh.vertices, dtype=np.float64), # type: ignore
+            vertex_normals=np.array(mesh.vertex_normals, dtype=np.float64), # type: ignore
             faces=np.array(mesh.faces), # type: ignore
+            face_normals=np.array(mesh.face_normals, dtype=np.float64), # type: ignore
         )
         return asset
 

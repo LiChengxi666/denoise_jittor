@@ -29,23 +29,27 @@ class VelocityModule(ModelSpec):
         self.predict_num_steps = cfg.get('predict_num_steps', 1)
         self.denoise_inner_steps = cfg.get('denoise_inner_steps', 4)
         self.predict_step_size = cfg.get('predict_step_size', 1.0)
-        self.target_mode = cfg.get('target_mode', 'noisy')
+        self.alpha_blend = cfg.get('alpha_blend', 1.0)
+        self.target_mode = cfg.get('target_mode', 'mix')
         assert self.target_mode in ['noisy', 'mix'], f"unsupported target_mode: {self.target_mode}"
         
         # score-matching
         self.dsm_sigma = cfg['dsm_sigma']
         self.cd_loss_enabled = cfg.get('cd_loss_enabled', False)
         self.cd_loss_sample_points = cfg.get('cd_loss_sample_points', self.num_train_points)
+        self.point_plane_loss_enabled = cfg.get('point_plane_loss_enabled', False)
+        self.offset_reg_enabled = cfg.get('offset_reg_enabled', False)
         
         # networks
         self.encoder = FeatureExtraction(
             k=self.frame_knn,
             input_dim=3,
-            embedding_dim=cfg['feat_embedding_dim']
+            embedding_dim=cfg['feat_embedding_dim'],
+            global_feat=cfg.get('global_feat', False),
         )
         
         self.decoder = Decoder(
-            z_dim=self.encoder.embedding_dim,
+            z_dim=self.encoder.output_dim,
             dim=3,
             out_dim=3,
             hidden_size=cfg['decoder_hidden_dim'],
@@ -61,7 +65,12 @@ class VelocityModule(ModelSpec):
         clean_to_pred = jt.min(dist, dim=1)
         return (pred_to_clean.mean() + clean_to_pred.mean()) / self.dsm_sigma
     
-    def get_supervised_loss(self, pc_noisy, pc_mix, pc_clean):
+    def _point_plane_loss(self, pc_pred, pc_clean, pc_clean_normal):
+        normal = pc_clean_normal / (jt.sqrt((pc_clean_normal ** 2.0).sum(dim=-1, keepdims=True)) + 1e-8)
+        signed_dist = ((pc_pred - pc_clean) * normal).sum(dim=-1)
+        return ((signed_dist ** 2.0) / self.dsm_sigma).mean()
+    
+    def get_supervised_loss(self, pc_noisy, pc_mix, pc_clean, pc_clean_normal=None):
         """
         pcl_noisy: (B, N, 3)
         pcl_clean: (B, N, 3)
@@ -79,6 +88,8 @@ class VelocityModule(ModelSpec):
         pc_noisy = pc_noisy[:, pnt_idx, :]
         pc_mix = pc_mix[:, pnt_idx, :]
         pc_clean = pc_clean[:, pnt_idx, :]
+        if pc_clean_normal is not None:
+            pc_clean_normal = pc_clean_normal[:, pnt_idx, :]
         
         # target
         target_base = pc_noisy if self.target_mode == 'noisy' else pc_mix
@@ -91,19 +102,29 @@ class VelocityModule(ModelSpec):
         
         disp_loss = (((pred_dir - grad_dir_t_target) ** 2.0) / self.dsm_sigma).sum(dim=-1).mean()
         
-        if not self.cd_loss_enabled:
+        if not self.cd_loss_enabled and not self.point_plane_loss_enabled and not self.offset_reg_enabled:
             return {"loss": disp_loss}
         
-        cd_points = min(self.cd_loss_sample_points, pnt_idx.shape[0])
         pc_denoised = pc_mix + pred_dir
-        cd_loss = self._patch_chamfer_loss(
-            pc_pred=pc_denoised[:, :cd_points, :],
-            pc_clean=pc_clean[:, :cd_points, :],
-        )
-        return {
+        losses = {
             "disp_loss": disp_loss,
-            "cd_loss": cd_loss,
         }
+        
+        cd_points = min(self.cd_loss_sample_points, pnt_idx.shape[0])
+        if self.cd_loss_enabled:
+            losses["cd_loss"] = self._patch_chamfer_loss(
+                pc_pred=pc_denoised[:, :cd_points, :],
+                pc_clean=pc_clean[:, :cd_points, :],
+            )
+        if self.point_plane_loss_enabled and pc_clean_normal is not None:
+            losses["point_plane_loss"] = self._point_plane_loss(
+                pc_pred=pc_denoised,
+                pc_clean=pc_clean,
+                pc_clean_normal=pc_clean_normal,
+            )
+        if self.offset_reg_enabled:
+            losses["offset_reg"] = ((pred_dir ** 2.0).sum(dim=-1) / self.dsm_sigma).mean()
+        return losses
 
     def denoise_langevin_dynamics(self, pcl_noisy, num_steps: int=None, step_size: float=None):
         """
@@ -132,10 +153,14 @@ class VelocityModule(ModelSpec):
         pc_noisy = batch['pc_noisy'].reshape(-1, patch_size, 3)
         pc_mix = batch['pc_mix'].reshape(-1, patch_size, 3)
         pc_clean = batch['pc_clean'].reshape(-1, patch_size, 3)
+        pc_clean_normal = batch.get('pc_clean_normal', None)
+        if pc_clean_normal is not None:
+            pc_clean_normal = pc_clean_normal.reshape(-1, patch_size, 3)
         loss = self.get_supervised_loss(
             pc_noisy=pc_noisy,
             pc_mix=pc_mix,
             pc_clean=pc_clean,
+            pc_clean_normal=pc_clean_normal,
         )
         return loss
     
@@ -158,6 +183,9 @@ class VelocityModule(ModelSpec):
                     seed_k=self.predict_seed_k,
                     seed_k_alpha=self.predict_seed_k_alpha,
                 )
+                assert pc_next is not None, "patch_based_denoise returned None"
+            if self.alpha_blend != 1.0:
+                pc_next = pc_noisy + self.alpha_blend * (pc_next - pc_noisy)
             pc_denoised = pc_next.detach().numpy()
             res.append({"pc_denoised": pc_denoised})
         return res
@@ -171,6 +199,7 @@ class VelocityModule(ModelSpec):
                     "pc_noisy": b.meta['pc_noisy'], # (num_patches, patch_size, 3)
                     "pc_clean": b.meta['pc_clean'],
                     "pc_mix": b.meta['pc_mix'],
+                    **({"pc_clean_normal": b.meta["pc_clean_normal"]} if "pc_clean_normal" in b.meta else {}),
                 })
             else:
                 d = {

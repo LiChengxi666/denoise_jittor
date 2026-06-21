@@ -69,6 +69,7 @@ class VMSystem(DummySystem):
         
         ckpt_save_dir: str="experiments",
         ckpt_save_name: str="checkpoint",
+        config_snapshot=None,
     ):
         super().__init__(
             dataset_module=dataset_module,
@@ -79,6 +80,7 @@ class VMSystem(DummySystem):
             writer=writer,
             ckpt_save_dir=ckpt_save_dir,
             ckpt_save_name=ckpt_save_name,
+            config_snapshot=config_snapshot,
         )
     
     # override functions in dummy system if you want to implement training/validation/prediction logic
