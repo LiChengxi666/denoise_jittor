@@ -198,13 +198,13 @@ rsync -avP \
   --exclude='starter_code/tmp_predict' \
   --exclude='starter_code/result.zip' \
   "/home/enovoczy/计图/" \
-  ubuntu@36.103.199.214:/home/ubuntu/denoise_jittor/
+  ubuntu@36.103.234.94:/home/ubuntu/denoise_jittor/
 ```
 
 云服务器上训练：
 
 ```bash
-ssh ubuntu@36.103.199.214
+ssh ubuntu@36.103.234.94
 source $HOME/miniconda3/etc/profile.d/conda.sh
 conda activate jittor
 cd /home/ubuntu/denoise_jittor/starter_code
@@ -255,6 +255,6 @@ zip -r ../result.zip shapenet/
 
 ```bash
 rsync -avP \
-  ubuntu@36.103.199.214:/home/ubuntu/denoise_jittor/starter_code/result.zip \
+  ubuntu@36.103.234.94:/home/ubuntu/denoise_jittor/starter_code/result.zip \
   "/home/enovoczy/计图/result.zip"
 ```

@@ -20,7 +20,7 @@ env/
 dataset_train/
 dataset_test_noisy/
 test_gt/
-datalist/
+/datalist/
 
 # Training and prediction outputs
 starter_code/experiments/
@@ -49,3 +49,23 @@ experiments/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local agent/context files
+.codex/
+.claude/
+.agents/
+AGENTS.md
+CLAUDE.md
+
+# Local experiment logs and run artifacts
+/log/
+starter_code/logs/
+starter_code/.grid_tmp/
+starter_code/diagnostics/
+starter_code/tmp_predict_val/
+starter_code/val_gt/
+starter_code/val_noisy/
+starter_code/val_meta/
+
+# Local reference materials
+reference/

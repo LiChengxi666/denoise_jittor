@@ -29,6 +29,9 @@ class VelocityModule(ModelSpec):
         self.predict_num_steps = cfg.get('predict_num_steps', 1)
         self.denoise_inner_steps = cfg.get('denoise_inner_steps', 4)
         self.predict_step_size = cfg.get('predict_step_size', 1.0)
+        self.predict_momentum = cfg.get('predict_momentum', 0.0)
+        self.predict_step_decay = cfg.get('predict_step_decay', 'none')
+        assert self.predict_step_decay in ['none', 'linear'], f"unsupported predict_step_decay: {self.predict_step_decay}"
         self.alpha_blend = cfg.get('alpha_blend', 1.0)
         self.target_mode = cfg.get('target_mode', 'mix')
         assert self.target_mode in ['noisy', 'mix'], f"unsupported target_mode: {self.target_mode}"
@@ -37,8 +40,15 @@ class VelocityModule(ModelSpec):
         self.dsm_sigma = cfg['dsm_sigma']
         self.cd_loss_enabled = cfg.get('cd_loss_enabled', False)
         self.cd_loss_sample_points = cfg.get('cd_loss_sample_points', self.num_train_points)
+        self.cd_loss_independent_sampling = cfg.get('cd_loss_independent_sampling', False)
         self.point_plane_loss_enabled = cfg.get('point_plane_loss_enabled', False)
         self.offset_reg_enabled = cfg.get('offset_reg_enabled', False)
+        self.repulsion_loss_enabled = cfg.get('repulsion_loss_enabled', False)
+        self.repulsion_k = cfg.get('repulsion_k', 8)
+        self.repulsion_h = cfg.get('repulsion_h', 0.03)
+        self.scale_loss_enabled = cfg.get('scale_loss_enabled', False)
+        self.scale_min_ratio = cfg.get('scale_min_ratio', 0.96)
+        self.scale_max_ratio = cfg.get('scale_max_ratio', 1.04)
         
         # networks
         self.encoder = FeatureExtraction(
@@ -69,8 +79,45 @@ class VelocityModule(ModelSpec):
         normal = pc_clean_normal / (jt.sqrt((pc_clean_normal ** 2.0).sum(dim=-1, keepdims=True)) + 1e-8)
         signed_dist = ((pc_pred - pc_clean) * normal).sum(dim=-1)
         return ((signed_dist ** 2.0) / self.dsm_sigma).mean()
+
+    def _repulsion_loss(self, pc_pred):
+        """
+        pc_pred: (B, M, 3)
+        """
+        _, M, _ = pc_pred.shape
+        if M <= 1 or self.repulsion_k <= 0:
+            return jt.array(0.0)
+        k = min(self.repulsion_k + 1, M)
+        dist = ((pc_pred.unsqueeze(2) - pc_pred.unsqueeze(1)) ** 2.0).sum(dim=-1)
+        dist_k, _ = jt.topk(dist, k=k, dim=-1, largest=False)
+        dist_k = dist_k[:, :, 1:]
+        dist_k = jt.sqrt(dist_k + 1e-12)
+        gap = self.repulsion_h - dist_k
+        penalty = jt.maximum(gap, gap * 0.0)
+        return ((penalty ** 2.0) / self.dsm_sigma).mean()
+
+    def _scale_consistency_loss(self, pc_pred, pc_noisy):
+        pred_center = pc_pred.mean(dim=1, keepdims=True)
+        noisy_center = pc_noisy.mean(dim=1, keepdims=True)
+        pred_radius = jt.sqrt(((pc_pred - pred_center) ** 2.0).sum(dim=-1).mean(dim=1) + 1e-12)
+        noisy_radius = jt.sqrt(((pc_noisy - noisy_center) ** 2.0).sum(dim=-1).mean(dim=1) + 1e-12)
+        min_radius = noisy_radius * self.scale_min_ratio
+        max_radius = noisy_radius * self.scale_max_ratio
+        shrink_gap = min_radius - pred_radius
+        expand_gap = pred_radius - max_radius
+        shrink_loss = jt.maximum(shrink_gap, shrink_gap * 0.0) ** 2.0
+        expand_loss = jt.maximum(expand_gap, expand_gap * 0.0) ** 2.0
+        return ((shrink_loss + expand_loss) / self.dsm_sigma).mean()
+
+    def _decay_factor(self, step: int, num_steps: int):
+        if self.predict_step_decay == 'none' or num_steps <= 1:
+            return 1.0
+        if self.predict_step_decay == 'linear':
+            tail = 1.0 / float(num_steps)
+            return max(0.25, 1.0 - (float(step) / float(num_steps - 1)) * (1.0 - tail))
+        raise ValueError(f"unsupported predict_step_decay: {self.predict_step_decay}")
     
-    def get_supervised_loss(self, pc_noisy, pc_mix, pc_clean, pc_clean_normal=None):
+    def get_supervised_loss(self, pc_noisy, pc_mix, pc_clean, pc_clean_normal=None, pc_clean_cd=None):
         """
         pcl_noisy: (B, N, 3)
         pcl_clean: (B, N, 3)
@@ -102,7 +149,13 @@ class VelocityModule(ModelSpec):
         
         disp_loss = (((pred_dir - grad_dir_t_target) ** 2.0) / self.dsm_sigma).sum(dim=-1).mean()
         
-        if not self.cd_loss_enabled and not self.point_plane_loss_enabled and not self.offset_reg_enabled:
+        if (
+            not self.cd_loss_enabled
+            and not self.point_plane_loss_enabled
+            and not self.offset_reg_enabled
+            and not self.repulsion_loss_enabled
+            and not self.scale_loss_enabled
+        ):
             return {"loss": disp_loss}
         
         pc_denoised = pc_mix + pred_dir
@@ -110,12 +163,23 @@ class VelocityModule(ModelSpec):
             "disp_loss": disp_loss,
         }
         
-        cd_points = min(self.cd_loss_sample_points, pnt_idx.shape[0])
         if self.cd_loss_enabled:
-            losses["cd_loss"] = self._patch_chamfer_loss(
-                pc_pred=pc_denoised[:, :cd_points, :],
-                pc_clean=pc_clean[:, :cd_points, :],
-            )
+            cd_points_pred = min(self.cd_loss_sample_points, pnt_idx.shape[0])
+            if self.cd_loss_independent_sampling:
+                clean_for_cd = pc_clean_cd if pc_clean_cd is not None else pc_clean
+                clean_points = clean_for_cd.shape[1]
+                cd_points_clean = min(self.cd_loss_sample_points, clean_points)
+                pred_idx = get_random_indices(pnt_idx.shape[0], cd_points_pred)
+                clean_idx = get_random_indices(clean_points, cd_points_clean)
+                losses["cd_loss"] = self._patch_chamfer_loss(
+                    pc_pred=pc_denoised[:, pred_idx, :],
+                    pc_clean=clean_for_cd[:, clean_idx, :],
+                )
+            else:
+                losses["cd_loss"] = self._patch_chamfer_loss(
+                    pc_pred=pc_denoised[:, :cd_points_pred, :],
+                    pc_clean=pc_clean[:, :cd_points_pred, :],
+                )
         if self.point_plane_loss_enabled and pc_clean_normal is not None:
             losses["point_plane_loss"] = self._point_plane_loss(
                 pc_pred=pc_denoised,
@@ -124,6 +188,10 @@ class VelocityModule(ModelSpec):
             )
         if self.offset_reg_enabled:
             losses["offset_reg"] = ((pred_dir ** 2.0).sum(dim=-1) / self.dsm_sigma).mean()
+        if self.repulsion_loss_enabled:
+            losses["repulsion_loss"] = self._repulsion_loss(pc_denoised)
+        if self.scale_loss_enabled:
+            losses["scale_loss"] = self._scale_consistency_loss(pc_denoised, pc_noisy)
         return losses
 
     def denoise_langevin_dynamics(self, pcl_noisy, num_steps: int=None, step_size: float=None):
@@ -137,6 +205,7 @@ class VelocityModule(ModelSpec):
         B, N, d = pcl_noisy.shape
         with jt.no_grad():
             pcl_next = pcl_noisy.clone()
+            velocity = pcl_next * 0.0
             for it in range(num_steps):
                 feat = self.encoder(pcl_next)  # (B, N, F)
                 F_dim = feat.shape[2]
@@ -145,7 +214,9 @@ class VelocityModule(ModelSpec):
                     c=feat.reshape(-1, F_dim)
                 ).reshape(B, N, d)
                 
-                pcl_next = pcl_next + (step_size / num_steps) * pred_dir
+                velocity = self.predict_momentum * velocity + pred_dir
+                step_scale = (step_size / num_steps) * self._decay_factor(it, num_steps)
+                pcl_next = pcl_next + step_scale * velocity
         return pcl_next, None
     
     def training_step(self, batch: Dict) -> Dict:
@@ -153,6 +224,10 @@ class VelocityModule(ModelSpec):
         pc_noisy = batch['pc_noisy'].reshape(-1, patch_size, 3)
         pc_mix = batch['pc_mix'].reshape(-1, patch_size, 3)
         pc_clean = batch['pc_clean'].reshape(-1, patch_size, 3)
+        pc_clean_cd = batch.get('pc_clean_cd', None)
+        if pc_clean_cd is not None:
+            clean_cd_size = batch['pc_clean_cd'].shape[-2]
+            pc_clean_cd = pc_clean_cd.reshape(-1, clean_cd_size, 3)
         pc_clean_normal = batch.get('pc_clean_normal', None)
         if pc_clean_normal is not None:
             pc_clean_normal = pc_clean_normal.reshape(-1, patch_size, 3)
@@ -161,6 +236,7 @@ class VelocityModule(ModelSpec):
             pc_mix=pc_mix,
             pc_clean=pc_clean,
             pc_clean_normal=pc_clean_normal,
+            pc_clean_cd=pc_clean_cd,
         )
         return loss
     
@@ -199,6 +275,7 @@ class VelocityModule(ModelSpec):
                     "pc_noisy": b.meta['pc_noisy'], # (num_patches, patch_size, 3)
                     "pc_clean": b.meta['pc_clean'],
                     "pc_mix": b.meta['pc_mix'],
+                    **({"pc_clean_cd": b.meta["pc_clean_cd"]} if "pc_clean_cd" in b.meta else {}),
                     **({"pc_clean_normal": b.meta["pc_clean_normal"]} if "pc_clean_normal" in b.meta else {}),
                 })
             else:

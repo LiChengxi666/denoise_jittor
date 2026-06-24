@@ -149,6 +149,8 @@ class AugmentPatch(Augment):
     num_patches: int
     
     train_cvm_network: bool
+
+    clean_patch_size: Optional[int]=None
     
     @classmethod
     def parse(cls, **kwargs) -> 'AugmentPatch':
@@ -170,10 +172,23 @@ class AugmentPatch(Augment):
         seed_points = pc_noisy[seed_idx]                         # (P, 3)
         
         tree = cKDTree(pc_noisy)
+        clean_patch_size = self.clean_patch_size or self.patch_size
         _, nn_idx = tree.query(seed_points, k=self.patch_size)   # (P, M)
+        if self.patch_size == 1:
+            nn_idx = nn_idx[:, None]
+        use_clean_cd = clean_patch_size != self.patch_size
+        if use_clean_cd:
+            clean_tree = cKDTree(pc)
+            clean_seed_points = pc[seed_idx]
+            _, nn_idx_clean_cd = clean_tree.query(clean_seed_points, k=clean_patch_size)
+            if clean_patch_size == 1:
+                nn_idx_clean_cd = nn_idx_clean_cd[:, None]
+        else:
+            nn_idx_clean_cd = None
 
         pat_A = pc_noisy[nn_idx]  # (P, M, 3)
         pat_B = pc[nn_idx]        # (P, M, 3)
+        pat_B_cd = pc[nn_idx_clean_cd] if use_clean_cd else None
         pat_N = None if pc_clean_normal is None else pc_clean_normal[nn_idx]
 
         l1, l2 = 1e-8, 1.0
@@ -188,6 +203,8 @@ class AugmentPatch(Augment):
         
         pat_A = pat_A - seed_points_t
         pat_B = pat_B - seed_points_t
+        if pat_B_cd is not None:
+            pat_B_cd = pat_B_cd - seed_points_t
         pat_t = pat_t - seed_points_t
         
         if asset.meta is None:
@@ -195,6 +212,8 @@ class AugmentPatch(Augment):
         asset.meta['pc_noisy'] = pat_A
         asset.meta['pc_clean'] = pat_B
         asset.meta['pc_mix'] = pat_t
+        if pat_B_cd is not None:
+            asset.meta['pc_clean_cd'] = pat_B_cd
         if pat_N is not None:
             asset.meta['pc_clean_normal'] = pat_N
 
