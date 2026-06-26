@@ -217,11 +217,49 @@ class AugmentPatch(Augment):
         if pat_N is not None:
             asset.meta['pc_clean_normal'] = pat_N
 
+@dataclass(frozen=True)
+class AugmentMeshSurfaceSample(Augment):
+
+    num_surface_samples: int = 10000
+
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentMeshSurfaceSample':
+        cls.check_keys(kwargs)
+        return AugmentMeshSurfaceSample(**kwargs)
+
+    def apply(self, asset: Asset, **kwargs):
+        assert asset.vertices is not None, "vertices is None, cannot apply AugmentMeshSurfaceSample"
+        assert asset.faces is not None, "faces is None, cannot apply AugmentMeshSurfaceSample"
+
+        # Use the existing sample_surface utility to densely sample mesh surface
+        from .utils import sample_surface
+        mesh_samples, _, _, _ = sample_surface(
+            num_samples=self.num_surface_samples,
+            vertices=asset.vertices,
+            faces=asset.faces,
+        )
+
+        # Apply the same normalization as the point cloud (center + unit sphere)
+        if asset.sampled_vertices is not None:
+            pc = asset.sampled_vertices
+            p_max = pc.max(axis=0)
+            p_min = pc.min(axis=0)
+            center = (p_max + p_min) / 2
+            scale = np.sqrt(((pc - center)**2).sum(axis=1).max()).max()
+            if scale > 1e-12:
+                mesh_samples = (mesh_samples - center) / scale
+
+        if asset.meta is None:
+            asset.meta = {}
+        asset.meta['mesh_surface_samples'] = mesh_samples.astype(np.float64)
+
+
 def get_augments(*args) -> List[Augment]:
     MAP = {
         "sample": AugmentSample,
         "normalize_pc": AugmentNormalizePC,
         "add_noise": AugmentAddNoise,
+        "mesh_surface_sample": AugmentMeshSurfaceSample,
         "linear": AugmentLinear,
         "patch": AugmentPatch,
     }

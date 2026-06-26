@@ -49,6 +49,14 @@ class VelocityModule(ModelSpec):
         self.scale_loss_enabled = cfg.get('scale_loss_enabled', False)
         self.scale_min_ratio = cfg.get('scale_min_ratio', 0.96)
         self.scale_max_ratio = cfg.get('scale_max_ratio', 1.04)
+
+        # Enhanced losses for eval-metric alignment
+        self.global_cd_enabled = cfg.get('global_cd_enabled', False)
+        self.global_cd_sample_points = cfg.get('global_cd_sample_points', 512)
+        self.p2s_proxy_enabled = cfg.get('p2s_proxy_enabled', False)
+        self.p2s_proxy_sample_points = cfg.get('p2s_proxy_sample_points', 512)
+        self.normal_consistency_enabled = cfg.get('normal_consistency_enabled', False)
+        self.normal_consistency_k = cfg.get('normal_consistency_k', 3)
         
         # networks
         self.encoder = FeatureExtraction(
@@ -109,6 +117,77 @@ class VelocityModule(ModelSpec):
         expand_loss = jt.maximum(expand_gap, expand_gap * 0.0) ** 2.0
         return ((shrink_loss + expand_loss) / self.dsm_sigma).mean()
 
+    def _global_cd_loss(self, pc_denoised, pc_clean):
+        """
+        Global-style CD loss on the full denoised patch.
+        Randomly subsamples points for efficiency, but uses the full spatial context.
+        pc_denoised: (B, M, 3)
+        pc_clean:    (B, M, 3)
+        """
+        B, M, _ = pc_denoised.shape
+        n_sample = min(self.global_cd_sample_points, M)
+        idx = get_random_indices(M, n_sample)
+
+        pc_pred_sub = pc_denoised[:, idx, :]
+        pc_clean_sub = pc_clean[:, idx, :]
+
+        dist = ((pc_pred_sub.unsqueeze(2) - pc_clean_sub.unsqueeze(1)) ** 2.0).sum(dim=-1)
+        pred_to_clean = jt.min(dist, dim=2)
+        clean_to_pred = jt.min(dist, dim=1)
+        return (pred_to_clean.mean() + clean_to_pred.mean()) / self.dsm_sigma
+
+    def _p2s_proxy_loss(self, pc_denoised, pc_clean):
+        """
+        Unidirectional CD from denoised points to clean surface points.
+        Directly approximates the P2S evaluation metric: P2S = min distance from
+        each denoised point to the surface. Using clean points as a surface proxy.
+        Unlike _patch_chamfer_loss which is bidirectional, this only penalizes
+        denoised→clean direction, matching P2S semantics.
+        pc_denoised: (B, M, 3)
+        pc_clean:    (B, M, 3)
+        Returns: mean(min_{c in clean} ||denoised_p - clean_c||^2) / dsm_sigma
+        """
+        B, M, _ = pc_denoised.shape
+
+        # Randomly subsample for efficiency
+        n_sample = min(self.p2s_proxy_sample_points, M)
+        idx = get_random_indices(M, n_sample)
+        pc_sub = pc_denoised[:, idx, :]  # (B, n_sample, 3)
+        clean_sub = pc_clean[:, idx, :]  # (B, n_sample, 3)
+
+        # Unidirectional: each denoised point → nearest clean point
+        dist = ((pc_sub.unsqueeze(2) - clean_sub.unsqueeze(1)) ** 2.0).sum(dim=-1)
+        # dist: (B, n_sample, n_sample)
+        min_dist_to_clean = jt.min(dist, dim=2)  # (B, n_sample)
+        return min_dist_to_clean.mean() / self.dsm_sigma
+
+    def _normal_consistency_loss(self, pc_denoised, pc_clean, pc_clean_normal):
+        """
+        Encourages denoised points to lie on the local surface defined by nearby clean points.
+        For each denoised point, finds k nearest clean points, averages their normals
+        as a robust surface normal estimate, and penalizes deviation from that tangent plane.
+        This is more robust than the single-neighbor point_plane_loss, especially near edges.
+        pc_denoised:       (B, M, 3)
+        pc_clean:          (B, M, 3)
+        pc_clean_normal:   (B, M, 3)
+        """
+        B, M, _ = pc_denoised.shape
+        k = min(self.normal_consistency_k, M)
+
+        # Find k nearest clean points for each denoised point
+        _, nn_idx, _ = knn_points(pc_denoised, pc_clean, k)  # nn_idx: (B, M, k)
+
+        # Gather normals of nearest clean points and average as robust surface normal
+        B_idx = jt.arange(B).unsqueeze(1).unsqueeze(2).broadcast((B, M, k))
+        gathered_normals = pc_clean_normal[B_idx, nn_idx]  # (B, M, k, 3)
+        target_normal = gathered_normals.mean(dim=2)  # (B, M, 3)
+        target_normal = target_normal / (jt.sqrt((target_normal ** 2.0).sum(dim=-1, keepdims=True)) + 1e-8)
+
+        # Penalize signed distance from denoised point to the tangent plane
+        # defined by the nearest clean point and the averaged normal
+        signed_dist = ((pc_denoised - pc_clean) * target_normal).sum(dim=-1)
+        return ((signed_dist ** 2.0) / self.dsm_sigma).mean()
+
     def _decay_factor(self, step: int, num_steps: int):
         if self.predict_step_decay == 'none' or num_steps <= 1:
             return 1.0
@@ -155,14 +234,17 @@ class VelocityModule(ModelSpec):
             and not self.offset_reg_enabled
             and not self.repulsion_loss_enabled
             and not self.scale_loss_enabled
+            and not self.global_cd_enabled
+            and not self.p2s_proxy_enabled
+            and not self.normal_consistency_enabled
         ):
             return {"loss": disp_loss}
-        
+
         pc_denoised = pc_mix + pred_dir
         losses = {
             "disp_loss": disp_loss,
         }
-        
+
         if self.cd_loss_enabled:
             cd_points_pred = min(self.cd_loss_sample_points, pnt_idx.shape[0])
             if self.cd_loss_independent_sampling:
@@ -183,6 +265,22 @@ class VelocityModule(ModelSpec):
         if self.point_plane_loss_enabled and pc_clean_normal is not None:
             losses["point_plane_loss"] = self._point_plane_loss(
                 pc_pred=pc_denoised,
+                pc_clean=pc_clean,
+                pc_clean_normal=pc_clean_normal,
+            )
+        if self.global_cd_enabled:
+            losses["global_cd_loss"] = self._global_cd_loss(
+                pc_denoised=pc_denoised,
+                pc_clean=pc_clean,
+            )
+        if self.p2s_proxy_enabled:
+            losses["p2s_proxy_loss"] = self._p2s_proxy_loss(
+                pc_denoised=pc_denoised,
+                pc_clean=pc_clean,
+            )
+        if self.normal_consistency_enabled and pc_clean_normal is not None:
+            losses["normal_consistency_loss"] = self._normal_consistency_loss(
+                pc_denoised=pc_denoised,
                 pc_clean=pc_clean,
                 pc_clean_normal=pc_clean_normal,
             )

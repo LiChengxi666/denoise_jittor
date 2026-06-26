@@ -8,8 +8,10 @@ conda activate jittor
 conda install -c conda-forge gcc=10 gxx=10 -y # 确保gcc、g++版本不高于10
 conda install -c conda-forge libgomp -y # 确保OpenMP runtime存在
 
+conda install pip # 确保使用 conda 安装的 pip，避免与系统 pip 冲突
+
 # 安装依赖
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 pip install jittor numpy trimesh scipy omegaconf point-cloud-utils
 ```
 
