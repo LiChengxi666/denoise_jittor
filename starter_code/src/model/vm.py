@@ -26,6 +26,7 @@ class VelocityModule(ModelSpec):
         self.predict_patch_size = cfg.get('predict_patch_size', 1000)
         self.predict_seed_k = cfg.get('predict_seed_k', 6)
         self.predict_seed_k_alpha = cfg.get('predict_seed_k_alpha', 1)
+        self.predict_patch_weight_gamma = cfg.get('predict_patch_weight_gamma', 1.0)
         self.predict_num_steps = cfg.get('predict_num_steps', 1)
         self.denoise_inner_steps = cfg.get('denoise_inner_steps', 4)
         self.predict_step_size = cfg.get('predict_step_size', 1.0)
@@ -41,6 +42,15 @@ class VelocityModule(ModelSpec):
         self.cd_loss_enabled = cfg.get('cd_loss_enabled', False)
         self.cd_loss_sample_points = cfg.get('cd_loss_sample_points', self.num_train_points)
         self.cd_loss_independent_sampling = cfg.get('cd_loss_independent_sampling', False)
+        self.info_cd_enabled = cfg.get('info_cd_enabled', False)
+        self.info_cd_sample_points = cfg.get('info_cd_sample_points', 512)
+        self.info_cd_tau = cfg.get('info_cd_tau', 0.1)
+        self.info_cd_reg_weight = cfg.get('info_cd_reg_weight', 0.03)
+        self.info_cd_normalize = cfg.get('info_cd_normalize', 'patch_rms')
+        assert self.info_cd_tau > 0, "info_cd_tau must be positive"
+        assert self.info_cd_normalize in ['patch_rms'], (
+            f"unsupported info_cd_normalize: {self.info_cd_normalize}"
+        )
         self.point_plane_loss_enabled = cfg.get('point_plane_loss_enabled', False)
         self.offset_reg_enabled = cfg.get('offset_reg_enabled', False)
         self.repulsion_loss_enabled = cfg.get('repulsion_loss_enabled', False)
@@ -82,6 +92,44 @@ class VelocityModule(ModelSpec):
         pred_to_clean = jt.min(dist, dim=2)
         clean_to_pred = jt.min(dist, dim=1)
         return (pred_to_clean.mean() + clean_to_pred.mean()) / self.dsm_sigma
+
+    @staticmethod
+    def _stable_logmeanexp(value, dim):
+        max_value = jt.max(value, dim=dim, keepdims=True)
+        shifted = value - max_value.broadcast(value.shape)
+        return max_value + jt.log(jt.exp(shifted).mean(dim=dim, keepdims=True) + 1e-12)
+
+    def _info_cd_direction_loss(self, nearest_dist):
+        mean_dist = nearest_dist.mean()
+        logmeanexp = self._stable_logmeanexp(
+            -nearest_dist / self.info_cd_tau,
+            dim=1,
+        ).mean()
+        return mean_dist + self.info_cd_reg_weight * self.info_cd_tau * logmeanexp
+
+    def _info_cd_loss(self, pc_pred, pc_clean):
+        """
+        Scale-normalized bidirectional Euclidean InfoCD.
+        Both directions share the RMS radius computed from the clean patch.
+        """
+        clean_center = pc_clean.mean(dim=1, keepdims=True)
+        clean_scale = jt.sqrt(
+            ((pc_clean - clean_center) ** 2.0).sum(dim=-1).mean(dim=1, keepdims=True)
+            + 1e-12
+        )
+        clean_scale = jt.maximum(clean_scale, jt.ones_like(clean_scale) * 1e-4)
+
+        dist = jt.sqrt(
+            ((pc_pred.unsqueeze(2) - pc_clean.unsqueeze(1)) ** 2.0).sum(dim=-1)
+            + 1e-12
+        )
+        dist_norm = dist / clean_scale.unsqueeze(-1)
+        pred_to_clean = jt.min(dist_norm, dim=2)
+        clean_to_pred = jt.min(dist_norm, dim=1)
+        return (
+            self._info_cd_direction_loss(pred_to_clean)
+            + self._info_cd_direction_loss(clean_to_pred)
+        ) * 0.5
     
     def _point_plane_loss(self, pc_pred, pc_clean, pc_clean_normal):
         normal = pc_clean_normal / (jt.sqrt((pc_clean_normal ** 2.0).sum(dim=-1, keepdims=True)) + 1e-8)
@@ -230,6 +278,7 @@ class VelocityModule(ModelSpec):
         
         if (
             not self.cd_loss_enabled
+            and not self.info_cd_enabled
             and not self.point_plane_loss_enabled
             and not self.offset_reg_enabled
             and not self.repulsion_loss_enabled
@@ -262,6 +311,15 @@ class VelocityModule(ModelSpec):
                     pc_pred=pc_denoised[:, :cd_points_pred, :],
                     pc_clean=pc_clean[:, :cd_points_pred, :],
                 )
+        if self.info_cd_enabled:
+            info_points_pred = min(self.info_cd_sample_points, pnt_idx.shape[0])
+            info_points_clean = min(self.info_cd_sample_points, pc_clean.shape[1])
+            pred_idx = get_random_indices(pnt_idx.shape[0], info_points_pred)
+            clean_idx = get_random_indices(pc_clean.shape[1], info_points_clean)
+            losses["info_cd_loss"] = self._info_cd_loss(
+                pc_pred=pc_denoised[:, pred_idx, :],
+                pc_clean=pc_clean[:, clean_idx, :],
+            )
         if self.point_plane_loss_enabled and pc_clean_normal is not None:
             losses["point_plane_loss"] = self._point_plane_loss(
                 pc_pred=pc_denoised,
@@ -454,7 +512,9 @@ def patch_based_denoise(model: VelocityModule, pcl_noisy, patch_size=1000, seed_
     patches = patches - seed_expand
     
     patch_dists = patch_dists / (patch_dists[:, -1:].broadcast(patch_dists.shape) + 1e-8)
-    patch_weights = jt.exp(-patch_dists).unsqueeze(-1)
+    patch_weights = jt.exp(
+        -model.predict_patch_weight_gamma * patch_dists
+    ).unsqueeze(-1)
     patches_denoised = []
     
     i = 0

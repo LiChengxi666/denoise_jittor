@@ -1,3 +1,4 @@
+# RTX 4070 (12GB VRAM) + 128GB RAM: indclean1600 fine-tune defaults.
 data_name: &data_name models/model_normalized.obj
 loader: &loader obj
 

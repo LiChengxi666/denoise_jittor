@@ -22,4 +22,6 @@ predict_seed_k: 6
 predict_seed_k_alpha: 1
 predict_patch_weight_gamma: 1.0
 predict_num_steps: 2
+predict_momentum: 0.0
+predict_step_decay: none
 alpha_blend: 1.0

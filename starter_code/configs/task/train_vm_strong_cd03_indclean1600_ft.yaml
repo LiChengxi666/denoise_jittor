@@ -1,0 +1,38 @@
+mode: train
+debug: False
+load_ckpt: experiments/vm_strong/checkpoint_39.pkl
+
+components:
+  data: train_strong_ft
+  transform: vm_strong_indclean1600
+  system: vm_strong
+  model: vm_strong_indclean1600
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.3
+  point_plane_loss: 0.3
+  offset_reg: 0.01
+
+optimizer:
+  __target__: adam
+  lr: 0.00001
+
+trainer:
+  epochs: 30
+  save_every: 10
+  save_best: True
+  save_last: True
+  save_last_every: 1
+  validate_every: 1
+  log_dir: logs
+  experiment_name: vm_strong_cd03_indclean1600_ft
+  log_to_file: True
+  metrics_csv: metrics.csv
+  log_config: True
+  log_every_n_steps: 0
+  grad_clip_norm: 1.0
+  lr_scheduler:
+    __target__: cosine
+    warmup_epochs: 3
+    min_lr: 0.000001

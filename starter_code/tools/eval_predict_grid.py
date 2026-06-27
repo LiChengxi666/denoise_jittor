@@ -16,6 +16,57 @@ import yaml
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+SPRINT_SETTINGS = [
+    {
+        "predict_step_size": 0.80,
+        "predict_num_steps": 2,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 1.00,
+        "predict_momentum": 0.00,
+        "predict_step_decay": "none",
+    },
+    {
+        "predict_step_size": 0.80,
+        "predict_num_steps": 2,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 1.00,
+        "predict_momentum": 0.60,
+        "predict_step_decay": "linear",
+    },
+    {
+        "predict_step_size": 0.65,
+        "predict_num_steps": 2,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 0.90,
+        "predict_momentum": 0.60,
+        "predict_step_decay": "linear",
+    },
+    {
+        "predict_step_size": 0.90,
+        "predict_num_steps": 2,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 1.00,
+        "predict_momentum": 0.60,
+        "predict_step_decay": "linear",
+    },
+    {
+        "predict_step_size": 0.80,
+        "predict_num_steps": 1,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 1.00,
+        "predict_momentum": 0.60,
+        "predict_step_decay": "linear",
+    },
+    {
+        "predict_step_size": 0.65,
+        "predict_num_steps": 3,
+        "denoise_inner_steps": 4,
+        "alpha_blend": 1.00,
+        "predict_momentum": 0.60,
+        "predict_step_decay": "linear",
+    },
+]
+
 
 def parse_list(text, cast):
     if text is None or text == "":
@@ -29,7 +80,9 @@ def load_yaml(path):
 
 
 def dump_yaml(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(path, "w") as f:
         yaml.safe_dump(data, f, sort_keys=False)
 
@@ -80,6 +133,111 @@ def parse_metrics(output):
     }
 
 
+def select_score(metrics, allow_cd_only=False):
+    cd_score = metrics["cd_score"]
+    p2s_score = metrics["p2s_score"]
+    if cd_score is None:
+        return "", "", "missing_cd"
+    if p2s_score is None:
+        if allow_cd_only:
+            return cd_score, "cd_only", None
+        return "", "", "missing_p2s"
+    score = metrics["score"]
+    if score is None:
+        score = 0.5 * (cd_score + p2s_score)
+    return score, "official_equal", None
+
+
+def build_sprint_settings(patch_weight_gammas):
+    return [
+        {**setting, "predict_patch_weight_gamma": gamma}
+        for setting, gamma in product(SPRINT_SETTINGS, patch_weight_gammas)
+    ]
+
+
+def resolve_grid_mode(grid_mode, checkpoint_count, from_screen_csv=False):
+    if grid_mode != "auto":
+        return grid_mode
+    if from_screen_csv:
+        return "sprint"
+    return "sprint" if checkpoint_count == 1 else "screen"
+
+
+def build_screen_settings():
+    return [{**SPRINT_SETTINGS[0], "predict_patch_weight_gamma": 1.0}]
+
+
+def resolve_path(path):
+    if os.path.isabs(path):
+        return path
+    return os.path.join(ROOT, path)
+
+
+def load_top_checkpoints(csv_path, top_k):
+    if top_k <= 0:
+        raise ValueError("screen_top_k must be positive")
+    with open(resolve_path(csv_path), "r", newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    ranked = sorted(
+        (
+            row for row in rows
+            if row.get("status") == "ok"
+            and row.get("score_mode") == "official_equal"
+            and row.get("score") not in (None, "")
+        ),
+        key=lambda row: float(row["score"]),
+        reverse=True,
+    )
+    checkpoints = []
+    seen = set()
+    for row in ranked:
+        checkpoint = resolve_path(row["checkpoint"])
+        if checkpoint in seen:
+            continue
+        if not os.path.isfile(checkpoint):
+            raise FileNotFoundError(f"screened checkpoint not found: {checkpoint}")
+        seen.add(checkpoint)
+        checkpoints.append(checkpoint)
+        if len(checkpoints) == top_k:
+            break
+    if not checkpoints:
+        raise ValueError(f"no official-score checkpoints found in {csv_path}")
+    return checkpoints
+
+
+def export_selected_artifacts(
+    best_row,
+    model_config,
+    model_path,
+    checkpoint_path,
+    allow_cd_only_export=False,
+):
+    if not model_path and not checkpoint_path:
+        return
+    if not model_path or not checkpoint_path:
+        raise ValueError(
+            "export_best_model and export_best_checkpoint must be provided together"
+        )
+    if best_row["score_mode"] != "official_equal" and not allow_cd_only_export:
+        raise ValueError("refusing to export a CD-only result as the selected submission")
+
+    source_checkpoint = resolve_path(best_row["checkpoint"])
+    target_checkpoint = resolve_path(checkpoint_path)
+    target_model = resolve_path(model_path)
+    if not os.path.isfile(source_checkpoint):
+        raise FileNotFoundError(f"selected checkpoint not found: {source_checkpoint}")
+
+    checkpoint_dir = os.path.dirname(target_checkpoint)
+    if checkpoint_dir:
+        os.makedirs(checkpoint_dir, exist_ok=True)
+    if os.path.realpath(source_checkpoint) != os.path.realpath(target_checkpoint):
+        shutil.copy2(source_checkpoint, target_checkpoint)
+    dump_yaml(target_model, model_config)
+    print(f"exported_selected_checkpoint: {target_checkpoint}")
+    print(f"exported_selected_model: {target_model}")
+
+
 def tail(text, n=1200):
     return text[-n:].replace("\n", "\\n") if text else ""
 
@@ -95,19 +253,38 @@ def main():
     parser.add_argument("--meta_dir", default="val_meta")
     parser.add_argument("--p2s_normalize", choices=["ref_gt", "meta", "none"], default="meta")
     parser.add_argument("--csv_path", default="experiments/vm_strong/val_grid.csv")
+    parser.add_argument(
+        "--grid_mode",
+        choices=["auto", "screen", "sprint", "cartesian"],
+        default="auto",
+        help="auto uses sprint for one checkpoint and anchor-only screen for multiple checkpoints",
+    )
+    parser.add_argument(
+        "--screen_csv",
+        default="",
+        help="stage-one CSV used to select the top checkpoints for a sprint grid",
+    )
+    parser.add_argument("--screen_top_k", type=int, default=2)
     parser.add_argument("--step_sizes", default="0.65,0.8")
     parser.add_argument("--predict_steps", default="2,3")
     parser.add_argument("--inner_steps", default="4")
     parser.add_argument("--patch_sizes", default="1200")
     parser.add_argument("--alpha_blends", default="0.9,1.0")
     parser.add_argument("--momentums", default="0.0,0.6")
+    parser.add_argument("--patch_weight_gammas", default="1.0,4.0,9.0")
     parser.add_argument("--step_decays", default="linear")
     parser.add_argument("--workers", default="8")
     parser.add_argument("--allow_cd_only", action="store_true")
     parser.add_argument("--keep_predictions", action="store_true")
+    parser.add_argument("--export_best_model", default="")
+    parser.add_argument("--export_best_checkpoint", default="")
+    parser.add_argument("--allow_cd_only_export", action="store_true")
     args = parser.parse_args()
 
-    checkpoints = sorted(glob.glob(os.path.join(ROOT, args.checkpoints)))
+    if args.screen_csv:
+        checkpoints = load_top_checkpoints(args.screen_csv, args.screen_top_k)
+    else:
+        checkpoints = sorted(glob.glob(os.path.join(ROOT, args.checkpoints)))
     if not checkpoints:
         raise FileNotFoundError(f"no checkpoints matched {args.checkpoints}")
 
@@ -120,6 +297,7 @@ def main():
     patch_sizes = parse_list(args.patch_sizes, int)
     alpha_blends = parse_list(args.alpha_blends, float)
     momentums = parse_list(args.momentums, float)
+    patch_weight_gammas = parse_list(args.patch_weight_gammas, float)
     step_decays = parse_list(args.step_decays, str)
 
     grid_dir = os.path.join(ROOT, ".grid_tmp")
@@ -127,26 +305,52 @@ def main():
     os.makedirs(os.path.dirname(os.path.join(ROOT, args.csv_path)), exist_ok=True)
 
     rows = []
+    model_configs = {}
     run_id = 0
-    for ckpt, step_size, pred_steps, inner, patch_size, alpha, momentum, step_decay in product(
-        checkpoints, step_sizes, predict_steps, inner_steps, patch_sizes, alpha_blends, momentums, step_decays
-    ):
+    grid_mode = resolve_grid_mode(
+        args.grid_mode,
+        len(checkpoints),
+        from_screen_csv=bool(args.screen_csv),
+    )
+    print(
+        f"grid_mode={grid_mode}, checkpoints={len(checkpoints)}, "
+        f"screen_csv={args.screen_csv or '-'}"
+    )
+    if grid_mode == "screen":
+        settings = build_screen_settings()
+    elif grid_mode == "sprint":
+        settings = build_sprint_settings(patch_weight_gammas)
+    else:
+        settings = [
+            {
+                "predict_step_size": step_size,
+                "predict_num_steps": pred_steps,
+                "denoise_inner_steps": inner,
+                "alpha_blend": alpha,
+                "predict_momentum": momentum,
+                "predict_patch_weight_gamma": gamma,
+                "predict_step_decay": step_decay,
+            }
+            for step_size, pred_steps, inner, alpha, momentum, gamma, step_decay in product(
+                step_sizes,
+                predict_steps,
+                inner_steps,
+                alpha_blends,
+                momentums,
+                patch_weight_gammas,
+                step_decays,
+            )
+        ]
+
+    for ckpt, setting, patch_size in product(checkpoints, settings, patch_sizes):
         run_id += 1
         model_cfg = dict(base_model)
-        if step_size is not None:
-            model_cfg["predict_step_size"] = step_size
-        if pred_steps is not None:
-            model_cfg["predict_num_steps"] = pred_steps
-        if inner is not None:
-            model_cfg["denoise_inner_steps"] = inner
+        for name, value in setting.items():
+            if value is not None:
+                model_cfg[name] = value
         if patch_size is not None:
             model_cfg["predict_patch_size"] = patch_size
-        if alpha is not None:
-            model_cfg["alpha_blend"] = alpha
-        if momentum is not None:
-            model_cfg["predict_momentum"] = momentum
-        if step_decay is not None:
-            model_cfg["predict_step_decay"] = step_decay
+        model_configs[run_id] = dict(model_cfg)
 
         pred_dir = os.path.join(".grid_tmp", f"pred_{run_id:04d}")
         task_cfg = dict(base_task)
@@ -187,19 +391,12 @@ def main():
             if eval_code == 0:
                 metrics = parse_metrics(eval_out)
 
-        missing_required_p2s = (
-            args.p2s_normalize != "none"
-            and not args.allow_cd_only
-            and metrics["score"] is not None
-            and metrics["p2s_score"] is None
+        official_score, score_mode, score_error = select_score(
+            metrics,
+            allow_cd_only=args.allow_cd_only or args.p2s_normalize == "none",
         )
-
-        cd_priority_score = ""
-        if not missing_required_p2s and metrics["cd_score"] is not None and metrics["p2s_score"] is not None:
-            cd_priority_score = 0.7 * metrics["cd_score"] + 0.3 * metrics["p2s_score"]
-
-        status = "ok" if metrics["score"] is not None and not missing_required_p2s else "failed"
-        if missing_required_p2s:
+        status = "ok" if score_error is None else "failed"
+        if score_error == "missing_p2s":
             failure_tail = "P2S metric missing while p2s_normalize is not none; pass --allow_cd_only to accept CD-only runs. "
             failure_tail += tail(pred_out + "\n" + eval_out)
         else:
@@ -208,8 +405,9 @@ def main():
         row = {
             "run_id": run_id,
             "checkpoint": os.path.relpath(ckpt, ROOT),
-            "score": metrics["score"] if status == "ok" and metrics["score"] is not None else "",
-            "cd_priority_score": cd_priority_score,
+            "grid_mode": grid_mode,
+            "score": official_score if status == "ok" else "",
+            "score_mode": score_mode,
             "cd_score": metrics["cd_score"] if metrics["cd_score"] is not None else "",
             "p2s_score": metrics["p2s_score"] if metrics["p2s_score"] is not None else "",
             "mean_cd_pred": metrics["mean_cd_pred"] if metrics["mean_cd_pred"] is not None else "",
@@ -220,6 +418,7 @@ def main():
             "predict_num_steps": model_cfg.get("predict_num_steps", ""),
             "denoise_inner_steps": model_cfg.get("denoise_inner_steps", ""),
             "predict_patch_size": model_cfg.get("predict_patch_size", ""),
+            "predict_patch_weight_gamma": model_cfg.get("predict_patch_weight_gamma", ""),
             "alpha_blend": model_cfg.get("alpha_blend", ""),
             "predict_momentum": model_cfg.get("predict_momentum", ""),
             "predict_step_decay": model_cfg.get("predict_step_decay", ""),
@@ -242,12 +441,23 @@ def main():
             print(pred_out[-4000:])
             print(eval_out[-4000:])
 
-    ranked = sorted([r for r in rows if r["cd_priority_score"] != ""], key=lambda r: float(r["cd_priority_score"]), reverse=True)
-    if ranked:
-        print("best_by_cd_priority:", ranked[0])
     ranked_final = sorted([r for r in rows if r["score"] != ""], key=lambda r: float(r["score"]), reverse=True)
     if ranked_final:
-        print("best_by_final_score:", ranked_final[0])
+        rank_label = (
+            "best_by_official_score"
+            if ranked_final[0]["score_mode"] == "official_equal"
+            else "best_by_cd_score"
+        )
+        print(f"{rank_label}:", ranked_final[0])
+        export_selected_artifacts(
+            best_row=ranked_final[0],
+            model_config=model_configs[ranked_final[0]["run_id"]],
+            model_path=args.export_best_model,
+            checkpoint_path=args.export_best_checkpoint,
+            allow_cd_only_export=args.allow_cd_only_export,
+        )
+    elif args.export_best_model or args.export_best_checkpoint:
+        raise RuntimeError("no successful run is available for selected artifact export")
     print(f"wrote {args.csv_path}")
 
 
