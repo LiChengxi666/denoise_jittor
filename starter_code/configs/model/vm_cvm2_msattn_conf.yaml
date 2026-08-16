@@ -1,0 +1,53 @@
+__target__: VelocityModule
+frame_knn: 24
+num_train_points: 512
+feat_embedding_dim: 384
+decoder_hidden_dim: 256
+dsm_sigma: 0.01
+target_mode: mix
+
+encoder_type: multiscale
+multiscale_knns: [16, 24, 40]
+multiscale_branch_dim: 192
+channel_attention: True
+
+cvm_stages: 2
+stage_step: 0.5
+distance_gate_enabled: True
+gate_min: 0.25
+gate_max: 1.15
+stage0_loss_enabled: True
+gate_reg_enabled: True
+gate_target_enabled: True
+
+confidence_enabled: True
+confidence_min: 0.1
+confidence_max: 2.0
+confidence_target_enabled: True
+confidence_reg_enabled: False
+confidence_target_alpha: 25.0
+
+cd_loss_enabled: True
+cd_loss_sample_points: 512
+cd_loss_independent_sampling: True
+point_plane_loss_enabled: True
+offset_reg_enabled: True
+infocd_loss_enabled: True
+infocd_mode: contrastive
+infocd_tau: 0.02
+infocd_tau_prime: 0.02
+infocd_lambda: 1.0
+infocd_use_l1: True
+infocd_sample_points: 512
+infocd_normalize_by_dsm_sigma: False
+
+global_feat: True
+denoise_inner_steps: 4
+predict_step_size: 0.75
+predict_patch_size: 1200
+predict_seed_k: 6
+predict_seed_k_alpha: 1
+predict_num_steps: 2
+predict_momentum: 0.3
+predict_step_decay: linear
+alpha_blend: 0.95

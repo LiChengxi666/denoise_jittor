@@ -1,0 +1,47 @@
+mode: train
+debug: False
+# Warm-start via CLI (partial load enabled below):
+#   --load_ckpt experiments/vm_strong/checkpoint_best.pkl
+# Cloud epoch-40 resume (sync from server first):
+#   --load_ckpt experiments/vm_strong/checkpoint_39.pkl
+load_ckpt_partial: true
+
+components:
+  data: train_strong
+  transform: vm_strong
+  system: vm_cvm2_msattn_conf
+  model: vm_cvm2_msattn_conf
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.35
+  point_plane_loss: 0.22
+  offset_reg: 0.004
+  infocd_loss: 0.01
+  stage0_loss: 0.2
+  gate_target_loss: 0.05
+  gate_reg: 0.0005
+  confidence_target_loss: 0.02
+
+optimizer:
+  __target__: adam
+  lr: 0.00002
+
+trainer:
+  epochs: 60
+  save_every: 10
+  save_best: True
+  save_last: True
+  save_last_every: 1
+  validate_every: 1
+  log_dir: logs
+  experiment_name: vm_cvm2_msattn_conf_p0
+  log_to_file: True
+  metrics_csv: metrics.csv
+  log_config: True
+  log_every_n_steps: 0
+  grad_clip_norm: 1.0
+  lr_scheduler:
+    __target__: cosine
+    warmup_epochs: 5
+    min_lr: 0.000002
