@@ -3,17 +3,15 @@ debug: False
 
 components:
   data: train_strong
-  transform: vm_cd
+  transform: vm_strong
   system: vm_cd
-  model: vm_cd
+  model: vm_strong
 
 loss:
   disp_loss: 1.0
-  cd_loss: 0.6
-  point_plane_loss: 0.25
-  offset_reg: 0.005
-  repulsion_loss: 0.02
-  scale_loss: 0.02
+  cd_loss: 0.2
+  point_plane_loss: 0.3
+  offset_reg: 0.01
 
 optimizer:
   __target__: adam

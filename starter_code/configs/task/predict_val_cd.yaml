@@ -6,7 +6,7 @@ components:
   data: predict_val
   transform: predict
   system: vm
-  model: vm_cd
+  model: vm_strong
 
 writer:
   __target__: vm

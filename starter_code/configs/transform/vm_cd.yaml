@@ -21,7 +21,6 @@ train_transform:
     
     - __target__: patch
       patch_size: 1200
-      clean_patch_size: 1400
       num_patches: 4
       train_cvm_network: False
 
@@ -40,7 +39,6 @@ validate_transform:
     
     - __target__: patch
       patch_size: 1200
-      clean_patch_size: 1400
       num_patches: 4
       train_cvm_network: False
 
