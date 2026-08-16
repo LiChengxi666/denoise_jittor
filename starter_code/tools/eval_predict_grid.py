@@ -69,6 +69,22 @@ def parse_metrics(output):
             r"平均 CD_noisy:\s*([0-9]+(?:\.[0-9]+)?)",
             r"mean_cd_noisy\s*=\s*([0-9]+(?:\.[0-9]+)?)",
         ]),
+        "mean_cd_pred_to_gt": _parse_float(output, [
+            r"平均 CD_pred_to_gt:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_pred_to_gt\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_gt_to_pred": _parse_float(output, [
+            r"平均 CD_gt_to_pred:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_gt_to_pred\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_noisy_to_gt": _parse_float(output, [
+            r"平均 CD_noisy_to_gt:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_noisy_to_gt\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_gt_to_noisy": _parse_float(output, [
+            r"平均 CD_gt_to_noisy:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_gt_to_noisy\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
         "mean_p2s_pred": _parse_float(output, [
             r"平均 P2S_pred:\s*([0-9]+(?:\.[0-9]+)?)",
             r"mean_p2s_pred\s*=\s*([0-9]+(?:\.[0-9]+)?)",
@@ -95,13 +111,14 @@ def main():
     parser.add_argument("--meta_dir", default="val_meta")
     parser.add_argument("--p2s_normalize", choices=["ref_gt", "meta", "none"], default="meta")
     parser.add_argument("--csv_path", default="experiments/vm_strong/val_grid.csv")
-    parser.add_argument("--step_sizes", default="0.65,0.8")
-    parser.add_argument("--predict_steps", default="2,3")
-    parser.add_argument("--inner_steps", default="4")
+    parser.add_argument("--step_sizes", default="0.6,0.7,0.8,0.9")
+    parser.add_argument("--predict_steps", default="1,2,3")
+    parser.add_argument("--inner_steps", default="3,4,5")
     parser.add_argument("--patch_sizes", default="1200")
-    parser.add_argument("--alpha_blends", default="0.9,1.0")
-    parser.add_argument("--momentums", default="0.0,0.6")
+    parser.add_argument("--alpha_blends", default="0.85,0.95,1.0")
+    parser.add_argument("--momentums", default="0.0,0.3,0.6")
     parser.add_argument("--step_decays", default="linear")
+    parser.add_argument("--p2s_floor", type=float, default=80.37)
     parser.add_argument("--workers", default="8")
     parser.add_argument("--allow_cd_only", action="store_true")
     parser.add_argument("--keep_predictions", action="store_true")
@@ -194,8 +211,12 @@ def main():
             and metrics["p2s_score"] is None
         )
 
+        p2s_pass = (
+            metrics["p2s_score"] is not None
+            and float(metrics["p2s_score"]) >= float(args.p2s_floor)
+        )
         cd_priority_score = ""
-        if not missing_required_p2s and metrics["cd_score"] is not None and metrics["p2s_score"] is not None:
+        if not missing_required_p2s and metrics["cd_score"] is not None and p2s_pass:
             cd_priority_score = 0.7 * metrics["cd_score"] + 0.3 * metrics["p2s_score"]
 
         status = "ok" if metrics["score"] is not None and not missing_required_p2s else "failed"
@@ -214,8 +235,14 @@ def main():
             "p2s_score": metrics["p2s_score"] if metrics["p2s_score"] is not None else "",
             "mean_cd_pred": metrics["mean_cd_pred"] if metrics["mean_cd_pred"] is not None else "",
             "mean_cd_noisy": metrics["mean_cd_noisy"] if metrics["mean_cd_noisy"] is not None else "",
+            "mean_cd_pred_to_gt": metrics["mean_cd_pred_to_gt"] if metrics["mean_cd_pred_to_gt"] is not None else "",
+            "mean_cd_gt_to_pred": metrics["mean_cd_gt_to_pred"] if metrics["mean_cd_gt_to_pred"] is not None else "",
+            "mean_cd_noisy_to_gt": metrics["mean_cd_noisy_to_gt"] if metrics["mean_cd_noisy_to_gt"] is not None else "",
+            "mean_cd_gt_to_noisy": metrics["mean_cd_gt_to_noisy"] if metrics["mean_cd_gt_to_noisy"] is not None else "",
             "mean_p2s_pred": metrics["mean_p2s_pred"] if metrics["mean_p2s_pred"] is not None else "",
             "mean_p2s_noisy": metrics["mean_p2s_noisy"] if metrics["mean_p2s_noisy"] is not None else "",
+            "p2s_floor": args.p2s_floor,
+            "p2s_pass": p2s_pass,
             "predict_step_size": model_cfg.get("predict_step_size", ""),
             "predict_num_steps": model_cfg.get("predict_num_steps", ""),
             "denoise_inner_steps": model_cfg.get("denoise_inner_steps", ""),
