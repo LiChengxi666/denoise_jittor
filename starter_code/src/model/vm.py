@@ -46,6 +46,9 @@ class VelocityModule(ModelSpec):
         self.repulsion_loss_enabled = cfg.get('repulsion_loss_enabled', False)
         self.repulsion_k = cfg.get('repulsion_k', 8)
         self.repulsion_h = cfg.get('repulsion_h', 0.03)
+        self.infocd_loss_enabled = cfg.get('infocd_loss_enabled', False)
+        self.infocd_tau = cfg.get('infocd_tau', 0.02)
+        self.infocd_use_l1 = cfg.get('infocd_use_l1', True)
         self.scale_loss_enabled = cfg.get('scale_loss_enabled', False)
         self.scale_min_ratio = cfg.get('scale_min_ratio', 0.96)
         self.scale_max_ratio = cfg.get('scale_max_ratio', 1.04)
@@ -65,7 +68,7 @@ class VelocityModule(ModelSpec):
             hidden_size=cfg['decoder_hidden_dim'],
         )
     
-    def _patch_chamfer_loss(self, pc_pred, pc_clean):
+    def _patch_chamfer_components(self, pc_pred, pc_clean):
         """
         pc_pred:  (B, M, 3)
         pc_clean: (B, M, 3)
@@ -73,7 +76,26 @@ class VelocityModule(ModelSpec):
         dist = ((pc_pred.unsqueeze(2) - pc_clean.unsqueeze(1)) ** 2.0).sum(dim=-1)
         pred_to_clean = jt.min(dist, dim=2)
         clean_to_pred = jt.min(dist, dim=1)
-        return (pred_to_clean.mean() + clean_to_pred.mean()) / self.dsm_sigma
+        pred_to_clean = pred_to_clean.mean() / self.dsm_sigma
+        clean_to_pred = clean_to_pred.mean() / self.dsm_sigma
+        return pred_to_clean + clean_to_pred, pred_to_clean, clean_to_pred
+
+    def _patch_chamfer_loss(self, pc_pred, pc_clean):
+        total, _, _ = self._patch_chamfer_components(pc_pred, pc_clean)
+        return total
+
+    def _infocd_direction_loss(self, nearest_dist):
+        tau = max(float(self.infocd_tau), 1e-6)
+        logits = -nearest_dist / tau
+        log_denom = jt.log(jt.exp(logits).sum(dim=1, keepdims=True) + 1e-12)
+        return (tau * ((nearest_dist / tau) + log_denom)).mean()
+
+    def _infocd_loss(self, pc_pred, pc_clean):
+        dist_sq = ((pc_pred.unsqueeze(2) - pc_clean.unsqueeze(1)) ** 2.0).sum(dim=-1)
+        dist = jt.sqrt(dist_sq + 1e-12) if self.infocd_use_l1 else dist_sq
+        pred_to_clean = jt.min(dist, dim=2)
+        clean_to_pred = jt.min(dist, dim=1)
+        return self._infocd_direction_loss(pred_to_clean) + self._infocd_direction_loss(clean_to_pred)
     
     def _point_plane_loss(self, pc_pred, pc_clean, pc_clean_normal):
         normal = pc_clean_normal / (jt.sqrt((pc_clean_normal ** 2.0).sum(dim=-1, keepdims=True)) + 1e-8)
@@ -154,6 +176,7 @@ class VelocityModule(ModelSpec):
             and not self.point_plane_loss_enabled
             and not self.offset_reg_enabled
             and not self.repulsion_loss_enabled
+            and not self.infocd_loss_enabled
             and not self.scale_loss_enabled
         ):
             return {"loss": disp_loss}
@@ -171,15 +194,26 @@ class VelocityModule(ModelSpec):
                 cd_points_clean = min(self.cd_loss_sample_points, clean_points)
                 pred_idx = get_random_indices(pnt_idx.shape[0], cd_points_pred)
                 clean_idx = get_random_indices(clean_points, cd_points_clean)
-                losses["cd_loss"] = self._patch_chamfer_loss(
-                    pc_pred=pc_denoised[:, pred_idx, :],
-                    pc_clean=clean_for_cd[:, clean_idx, :],
+                pc_cd_pred = pc_denoised[:, pred_idx, :]
+                pc_cd_clean = clean_for_cd[:, clean_idx, :]
+                cd_loss, cd_pred_to_clean, cd_clean_to_pred = self._patch_chamfer_components(
+                    pc_pred=pc_cd_pred,
+                    pc_clean=pc_cd_clean,
                 )
             else:
-                losses["cd_loss"] = self._patch_chamfer_loss(
-                    pc_pred=pc_denoised[:, :cd_points_pred, :],
-                    pc_clean=pc_clean[:, :cd_points_pred, :],
+                pc_cd_pred = pc_denoised[:, :cd_points_pred, :]
+                pc_cd_clean = pc_clean[:, :cd_points_pred, :]
+                cd_loss, cd_pred_to_clean, cd_clean_to_pred = self._patch_chamfer_components(
+                    pc_pred=pc_cd_pred,
+                    pc_clean=pc_cd_clean,
                 )
+            losses["cd_loss"] = cd_loss
+            losses["cd_pred_to_clean"] = cd_pred_to_clean
+            losses["cd_clean_to_pred"] = cd_clean_to_pred
+            if self.infocd_loss_enabled:
+                losses["infocd_loss"] = self._infocd_loss(pc_cd_pred, pc_cd_clean)
+        elif self.infocd_loss_enabled:
+            losses["infocd_loss"] = self._infocd_loss(pc_denoised, pc_clean)
         if self.point_plane_loss_enabled and pc_clean_normal is not None:
             losses["point_plane_loss"] = self._point_plane_loss(
                 pc_pred=pc_denoised,
