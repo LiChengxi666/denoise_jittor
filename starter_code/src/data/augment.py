@@ -63,7 +63,7 @@ class AugmentNormalizePC(Augment):
         p_min = pc.min(axis=0)
         center = (p_max + p_min) / 2
         pc = pc - center
-        scale = np.sqrt((pc**2).sum(axis=1).max()).max()
+        scale = max(float(np.sqrt((pc**2).sum(axis=1).max())), 1e-12)
         asset.sampled_vertices = pc / scale
 
 @dataclass(frozen=True)
