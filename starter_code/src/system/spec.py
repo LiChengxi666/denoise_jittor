@@ -239,6 +239,7 @@ class DummySystem():
         self._validation_loss = defaultdict(list)
         self._train_loss = defaultdict(list)
         self._warned_grad_clip = False
+        self._warned_missing_loss = set()
         self.logger.log_text(
             "Training setup: "
             f"epochs={self.epochs}, save_every={self.save_every}, save_last={self.save_last}, "
@@ -399,6 +400,13 @@ class DummySystem():
                     loss_sum += self.loss_config[name] * loss_dict[name]
                     num_weighted_losses += 1
                 self._train_loss[f"train/{name}"].append(_get_item(loss_dict[name]))
+            for name, weight in self.loss_config.items():
+                if weight > 0 and name not in loss_dict and name not in self._warned_missing_loss:
+                    print(
+                        f"\033[93mWarning: task loss '{name}' has weight {weight} but model did not "
+                        f"produce it; this term is ignored.\033[0m"
+                    )
+                    self._warned_missing_loss.add(name)
             assert num_weighted_losses > 0, "no configured training loss was produced by the model"
             loss_dict['loss_sum'] = loss_sum
             self._train_loss["train/loss_sum"].append(_get_item(loss_sum))
