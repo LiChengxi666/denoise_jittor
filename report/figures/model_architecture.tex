@@ -1,0 +1,45 @@
+\documentclass[tikz,border=5pt]{standalone}
+\usepackage[UTF8,fontset=fandol]{ctex}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\definecolor{navy}{HTML}{17365D}
+\definecolor{blue}{HTML}{5B9BD5}
+\definecolor{green}{HTML}{70AD47}
+\definecolor{orange}{HTML}{ED7D31}
+\begin{document}
+\begin{tikzpicture}[
+ font=\small,
+ node distance=7mm,
+ block/.style={draw=navy,thick,rounded corners=2pt,align=center,minimum height=13mm,minimum width=24mm},
+ conv/.style={block,fill=blue!17},
+ pool/.style={block,fill=green!16},
+ dec/.style={block,fill=orange!16},
+ arr/.style={-{Latex[length=2.2mm]},thick,draw=navy}
+]
+\node[block,fill=gray!12] (input) {混合 patch\\$B\times N\times3$};
+\node[conv,right=of input] (c1) {Dynamic EdgeConv 1\\$k=24,\ 3\to48$};
+\node[conv,right=of c1] (c2) {Dynamic EdgeConv 2\\$k=24,\ 48\to96$};
+\node[conv,right=of c2] (c3) {Dynamic EdgeConv 3\\$[48,96]\to384$};
+\node[pool,right=of c3] (local) {局部特征\\$N\times384$};
+\node[pool,above=8mm of local] (global) {全局 Max Pool\\$1\times384$};
+\node[pool,right=11mm of local] (concat) {广播并拼接\\$N\times768$};
+\node[dec,right=of concat] (d1) {Linear＋BN＋ReLU\\$768\to768$};
+\node[dec,right=of d1] (d2) {Dropout＋Linear\\$768\to256$};
+\node[dec,right=of d2] (out) {Linear\\逐点位移 $N\times3$};
+
+\draw[arr] (input)--(c1);
+\draw[arr] (c1)--(c2);
+\draw[arr] (c2)--(c3);
+\draw[arr] (c3)--(local);
+\draw[arr] (local)--(global);
+\draw[arr] (local)--(concat);
+\draw[arr] (global.east)-| (concat.north);
+\draw[arr] (concat)--(d1);
+\draw[arr] (d1)--(d2);
+\draw[arr] (d2)--(out);
+
+\begin{scope}[on background layer]
+\node[draw=blue!65,rounded corners=4pt,fit=(c1)(c2)(c3)(global)(local),inner sep=5pt,label={[blue!70!black]above:动态图特征编码器}] {};
+\node[draw=orange!75,rounded corners=4pt,fit=(d1)(d2)(out),inner sep=5pt,label={[orange!80!black]above:位移解码器}] {};
+\end{scope}
+\end{tikzpicture}
+\end{document}

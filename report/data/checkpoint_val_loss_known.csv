@@ -1,0 +1,10 @@
+epoch,checkpoint,val_loss_sum
+4,checkpoint_best.pkl,0.017662
+10,checkpoint_9.pkl,0.016144
+20,checkpoint_19.pkl,0.016045
+30,checkpoint_29.pkl,0.015452
+40,checkpoint_39.pkl,0.015491
+50,checkpoint_49.pkl,0.014789
+60,checkpoint_59.pkl,0.014611
+70,checkpoint_69.pkl,0.014492
+80,checkpoint_79.pkl,0.014413

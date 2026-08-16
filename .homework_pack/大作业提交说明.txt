@@ -1,0 +1,21 @@
+计图挑战赛大作业提交包（队伍：alpha奶龙）
+========================================
+
+目录结构
+--------
+实验报告.pdf          比赛实验报告（vm_strong + E9 最终提交，A榜 74.16，排名第36）
+starter_code/         比赛代码框架（默认入口 vm_strong）
+
+代码入口
+--------
+训练：  cd starter_code && python run.py --task configs/task/train_vm.yaml
+推理：  cd starter_code && python run.py --task configs/task/predict_vm_E9.yaml
+        （E9 最终 A 榜提交配置，权重 experiments/vm_strong/checkpoint_39.pkl）
+检查：  python tools/check_predictions.py --pred_dir ./tmp_predict --noisy_dir ../dataset_test_noisy
+
+说明
+----
+- 本包不含 dataset_train / dataset_test_noisy、checkpoint 权重及固定验证集点云（体积过大）。
+- 固定验证集可通过 starter_code/tools/make_validation_set.py 生成 val_noisy / val_gt。
+- 权重需自行训练或同步 experiments/vm_strong/checkpoint_39.pkl 后再跑 E9 推理。
+- 依赖见 starter_code/requirements.txt，框架为 Jittor。

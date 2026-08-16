@@ -1,0 +1,274 @@
+from abc import ABC, abstractmethod
+from copy import deepcopy
+from dataclasses import dataclass
+from scipy.spatial import cKDTree
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+
+from .asset import Asset
+from .spec import ConfigSpec
+from .utils import random_euler_rotation, sample_vertex_groups
+
+@dataclass(frozen=True)
+class Augment(ConfigSpec):
+    
+    @classmethod
+    @abstractmethod
+    def parse(cls, **kwags) -> 'Augment':
+        pass
+    
+    @abstractmethod
+    def apply(self, asset: Asset, **kwargs):
+        pass
+
+@dataclass(frozen=True)
+class AugmentSample(Augment):
+    
+    num_samples: int # total number of vertices on the face to be sampled
+    
+    num_vertex_samples: int=0 # number of vertices to be chosen
+    
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentSample':
+        cls.check_keys(kwargs)
+        return AugmentSample(**kwargs)
+    
+    def apply(self, asset: Asset, **kwargs):
+        assert asset.vertices is not None
+        assert asset.faces is not None
+        sampled_vertices, sampled_normals, sampled_vertex_groups, hidden_states = sample_vertex_groups(
+            vertices=asset.vertices,
+            faces=asset.faces,
+            num_samples=self.num_samples,
+            num_vertex_samples=self.num_vertex_samples,
+            vertex_normals=asset.vertex_normals,
+            face_normals=asset.face_normals,
+        )
+        asset.sampled_vertices = sampled_vertices
+        asset.sampled_normals = sampled_normals
+
+@dataclass(frozen=True)
+class AugmentNormalizePC(Augment):
+    
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentNormalizePC':
+        cls.check_keys(kwargs)
+        return AugmentNormalizePC(**kwargs)
+    
+    def apply(self, asset: Asset, **kwargs):
+        pc = asset.sampled_vertices
+        assert pc is not None, "sampled_vertices is None, cannot apply AugmentNormalizePC"
+        p_max = pc.max(axis=0)
+        p_min = pc.min(axis=0)
+        center = (p_max + p_min) / 2
+        pc = pc - center
+        scale = np.sqrt((pc**2).sum(axis=1).max()).max()
+        asset.sampled_vertices = pc / scale
+
+@dataclass(frozen=True)
+class AugmentAddNoise(Augment):
+    
+    noise_std_min: float
+    
+    noise_std_max: float
+
+    noise_types: Tuple[str, ...]=("gaussian", "laplace")
+    
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentAddNoise':
+        cls.check_keys(kwargs)
+        noise_types = kwargs.get("noise_types", ("gaussian", "laplace"))
+        if isinstance(noise_types, str):
+            noise_types = (noise_types,)
+        else:
+            noise_types = tuple(noise_types)
+        return AugmentAddNoise(
+            noise_std_min=kwargs["noise_std_min"],
+            noise_std_max=kwargs["noise_std_max"],
+            noise_types=noise_types,
+        )
+    
+    def apply(self, asset: Asset, **kwargs):
+        pc = asset.sampled_vertices
+        assert pc is not None, "sampled_vertices is None, cannot apply AugmentAddNoise"
+        noise_std = np.random.uniform(self.noise_std_min, self.noise_std_max)
+        noise_type = np.random.choice(self.noise_types)
+        if noise_type == "gaussian":
+            noise = np.random.normal(0, noise_std, size=pc.shape)
+        elif noise_type == "laplace":
+            noise = np.random.laplace(0, noise_std / np.sqrt(2.0), size=pc.shape)
+        else:
+            raise ValueError(f"unsupported noise type: {noise_type}")
+        asset.sampled_vertices_noisy = pc + noise
+
+@dataclass(frozen=True)
+class AugmentLinear(Augment):
+    
+    scale: Tuple[float, float]=(1.0, 1.0)
+    
+    rotate_x_range: Tuple[float, float]=(0.0, 0.0)
+    
+    rotate_y_range: Tuple[float, float]=(0.0, 0.0)
+    
+    rotate_z_range: Tuple[float, float]=(0.0, 0.0)
+    
+    scale_p: float=0.0
+    
+    rotate_p: float=0.0
+    
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentLinear':
+        cls.check_keys(kwargs)
+        return AugmentLinear(**kwargs)
+    
+    def apply(self, asset: Asset, **kwargs):
+        trans_vertex = np.eye(4, dtype=np.float32)
+        if np.random.rand() < self.rotate_p:
+            r = random_euler_rotation(
+                1,
+                x_range=self.rotate_x_range,
+                y_range=self.rotate_y_range,
+                z_range=self.rotate_z_range,
+            )[0]
+            trans_vertex = r @ trans_vertex
+        if np.random.rand() < self.scale_p:
+            scale = np.zeros((4, 4), dtype=np.float32)
+            scale[0, 0] = np.random.uniform(self.scale[0], self.scale[1])
+            scale[1, 1] = np.random.uniform(self.scale[0], self.scale[1])
+            scale[2, 2] = np.random.uniform(self.scale[0], self.scale[1])
+            scale[3, 3] = 1.0
+            trans_vertex = scale @ trans_vertex
+        asset.transform(trans_vertex)
+
+@dataclass(frozen=True)
+class AugmentPatch(Augment):
+    
+    patch_size: int
+    
+    num_patches: int
+    
+    train_cvm_network: bool
+
+    clean_patch_size: Optional[int]=None
+    
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentPatch':
+        cls.check_keys(kwargs)
+        return AugmentPatch(**kwargs)
+    
+    def apply(self, asset: Asset, **kwargs):
+        pc = asset.sampled_vertices
+        pc_noisy = asset.sampled_vertices_noisy
+        pc_clean_normal = asset.sampled_normals
+        
+        assert pc is not None
+        assert pc_noisy is not None
+        
+        N = pc_noisy.shape[0]
+        
+        num_patches = min(self.num_patches, N)
+        seed_idx = np.random.permutation(N)[:num_patches]        # (P,)
+        seed_points = pc_noisy[seed_idx]                         # (P, 3)
+        
+        tree = cKDTree(pc_noisy)
+        clean_patch_size = self.clean_patch_size or self.patch_size
+        _, nn_idx = tree.query(seed_points, k=self.patch_size)   # (P, M)
+        if self.patch_size == 1:
+            nn_idx = nn_idx[:, None]
+        use_clean_cd = clean_patch_size != self.patch_size
+        if use_clean_cd:
+            clean_tree = cKDTree(pc)
+            clean_seed_points = pc[seed_idx]
+            _, nn_idx_clean_cd = clean_tree.query(clean_seed_points, k=clean_patch_size)
+            if clean_patch_size == 1:
+                nn_idx_clean_cd = nn_idx_clean_cd[:, None]
+        else:
+            nn_idx_clean_cd = None
+
+        pat_A = pc_noisy[nn_idx]  # (P, M, 3)
+        pat_B = pc[nn_idx]        # (P, M, 3)
+        pat_B_cd = pc[nn_idx_clean_cd] if use_clean_cd else None
+        pat_N = None if pc_clean_normal is None else pc_clean_normal[nn_idx]
+
+        l1, l2 = 1e-8, 1.0
+        t = np.random.rand(num_patches, self.patch_size, 1)
+        t = (l2 - l1) * t + l1
+        
+        pat_t = t * pat_B + (1 - t) * pat_A
+        seed_points_t = (
+            t[:, 0:1, :] * pc[seed_idx][:, None, :] +
+            (1 - t[:, 0:1, :]) * pc_noisy[seed_idx][:, None, :]
+        )
+        
+        pat_A = pat_A - seed_points_t
+        pat_B = pat_B - seed_points_t
+        if pat_B_cd is not None:
+            pat_B_cd = pat_B_cd - seed_points_t
+        pat_t = pat_t - seed_points_t
+        
+        if asset.meta is None:
+            asset.meta = {}
+        asset.meta['pc_noisy'] = pat_A
+        asset.meta['pc_clean'] = pat_B
+        asset.meta['pc_mix'] = pat_t
+        if pat_B_cd is not None:
+            asset.meta['pc_clean_cd'] = pat_B_cd
+        if pat_N is not None:
+            asset.meta['pc_clean_normal'] = pat_N
+
+@dataclass(frozen=True)
+class AugmentMeshSurfaceSample(Augment):
+
+    num_surface_samples: int = 10000
+
+    @classmethod
+    def parse(cls, **kwargs) -> 'AugmentMeshSurfaceSample':
+        cls.check_keys(kwargs)
+        return AugmentMeshSurfaceSample(**kwargs)
+
+    def apply(self, asset: Asset, **kwargs):
+        assert asset.vertices is not None, "vertices is None, cannot apply AugmentMeshSurfaceSample"
+        assert asset.faces is not None, "faces is None, cannot apply AugmentMeshSurfaceSample"
+
+        # Use the existing sample_surface utility to densely sample mesh surface
+        from .utils import sample_surface
+        mesh_samples, _, _, _ = sample_surface(
+            num_samples=self.num_surface_samples,
+            vertices=asset.vertices,
+            faces=asset.faces,
+        )
+
+        # Apply the same normalization as the point cloud (center + unit sphere)
+        if asset.sampled_vertices is not None:
+            pc = asset.sampled_vertices
+            p_max = pc.max(axis=0)
+            p_min = pc.min(axis=0)
+            center = (p_max + p_min) / 2
+            scale = np.sqrt(((pc - center)**2).sum(axis=1).max()).max()
+            if scale > 1e-12:
+                mesh_samples = (mesh_samples - center) / scale
+
+        if asset.meta is None:
+            asset.meta = {}
+        asset.meta['mesh_surface_samples'] = mesh_samples.astype(np.float64)
+
+
+def get_augments(*args) -> List[Augment]:
+    MAP = {
+        "sample": AugmentSample,
+        "normalize_pc": AugmentNormalizePC,
+        "add_noise": AugmentAddNoise,
+        "mesh_surface_sample": AugmentMeshSurfaceSample,
+        "linear": AugmentLinear,
+        "patch": AugmentPatch,
+    }
+    MAP: Dict[str, type[Augment]]
+    augments = []
+    for (i, config) in enumerate(args):
+        __target__ = config.get('__target__')
+        assert __target__ is not None, f"do not find `__target__` in augment of position {i}"
+        c = deepcopy(config)
+        del c['__target__']
+        augments.append(MAP[__target__].parse(**c))
+    return augments

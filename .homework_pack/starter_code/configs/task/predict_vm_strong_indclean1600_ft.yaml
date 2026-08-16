@@ -1,0 +1,14 @@
+mode: predict
+debug: False
+load_ckpt: experiments/vm_strong_cd03_indclean1600_ft/checkpoint_last.pkl
+
+components:
+  data: predict
+  transform: vm_strong
+  system: vm
+  model: vm_strong_indclean1600
+
+writer:
+  __target__: vm
+  save_dir: tmp_predict
+  save_name: denoised
