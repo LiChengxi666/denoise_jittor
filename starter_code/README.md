@@ -66,6 +66,29 @@ python run.py --task configs/task/train_vm.yaml \
   --ckpt_dir experiments/vm_strong_4090_bs6
 ```
 
+需要短训时可以直接覆盖 epoch 数，不必复制 task 配置：
+
+```bash
+python run.py --task configs/task/train_vm_cd.yaml \
+  --epochs 20 \
+  --experiment_name vm_cd_phase1_e20 \
+  --ckpt_dir experiments/vm_cd_phase1_e20
+```
+
+`train_vm_cd.yaml` 及其消融配置已启用 `trainer.periodic_eval`：每 10 个 epoch 会用当前 checkpoint 对固定验证集推理，并调用 `evaluate.py` 计算 CD/P2S/final。若固定验证集尚未生成，评估会记录失败摘要但不会中断训练。首次训练前建议先运行：
+
+```bash
+python tools/make_validation_set.py
+```
+
+周期评估产物：
+
+| 路径 | 说明 |
+|---|---|
+| `diagnostics/periodic_eval/<experiment>/epoch_XXXX.csv` | 对应 epoch 的逐样本 CD/P2S/final 明细 |
+| `logs/<experiment>/metrics.csv` | 会追加 `eval/score`、`eval/cd_score`、`eval/p2s_score`、`eval/status` 等列 |
+| `tmp_periodic_eval/` | 临时预测目录，默认评估后清理 |
+
 ## 推理（生成提交文件）
 修改 `configs/task/predict_vm.yaml` 中的 `load_ckpt` 为你的最佳权重路径，然后运行：
 ```bash
@@ -75,6 +98,14 @@ python run.py --task configs/task/predict_vm.yaml
 
 降噪结果保存在 `tmp_predict/` 目录下，格式为 `denoised.npy` (float32, shape (N,3))。
 预测阶段使用空增强，不会对测试集 `noisy.npy` 重新采样、归一化、加噪或切训练 patch。
+
+也可以用命令行临时覆盖 checkpoint 和输出目录，适合做验证或对比：
+
+```bash
+python run.py --task configs/task/predict_val_cd.yaml \
+  --load_ckpt experiments/vm_cd/checkpoint_9.pkl \
+  --writer_save_dir tmp_predict_val_cd_e10
+```
 
 ## 固定验证集与推理参数搜索
 训练过程中的 `checkpoint_best.pkl` 仍按合成验证 loss 保存。提交前建议使用固定验证集和 CD/P2S 分数选择 checkpoint 与推理参数：
@@ -87,6 +118,17 @@ python tools/eval_predict_grid.py --checkpoints "experiments/vm_strong/checkpoin
 `make_validation_set.py` 会额外写出 `val_meta/<synset_id>/<model_id>/meta.json`，记录生成固定验证点云时使用的原始 mesh 归一化参数。该 meta 用于排查 P2S 评测时的 mesh/point 坐标对齐问题。
 
 网格搜索结果保存在 `experiments/vm_strong/val_grid.csv`。选择分数最高的 checkpoint 后，更新 `configs/task/predict_vm.yaml` 的 `load_ckpt` 再生成正式提交。
+
+当前 CD 友好分支和消融入口：
+
+| 入口 | 目的 |
+|---|---|
+| `configs/task/train_vm_cd.yaml` | full `vm_cd`：独立 CD sampling + point-plane + offset + repulsion + scale |
+| `configs/task/train_vm_cd_ablate_cd_only.yaml` | 消融：仅 `disp_loss + cd_loss` |
+| `configs/task/train_vm_cd_ablate_cd_scale.yaml` | 消融：`disp_loss + cd_loss + scale_loss` |
+| `configs/task/train_vm_cd_ablate_cd_repulsion.yaml` | 消融：`disp_loss + cd_loss + repulsion_loss` |
+
+建议先短训 full `vm_cd` 10-20 epoch，再决定是否完整训练和消融。
 
 ## P2S 与提交诊断
 
@@ -198,13 +240,13 @@ rsync -avP \
   --exclude='starter_code/tmp_predict' \
   --exclude='starter_code/result.zip' \
   "/home/enovoczy/计图/" \
-  ubuntu@36.103.234.94:/home/ubuntu/denoise_jittor/
+  ubuntu@36.103.236.211:/home/ubuntu/denoise_jittor/
 ```
 
 云服务器上训练：
 
 ```bash
-ssh ubuntu@36.103.234.94
+ssh ubuntu@36.103.236.211
 source $HOME/miniconda3/etc/profile.d/conda.sh
 conda activate jittor
 cd /home/ubuntu/denoise_jittor/starter_code
@@ -255,6 +297,6 @@ zip -r ../result.zip shapenet/
 
 ```bash
 rsync -avP \
-  ubuntu@36.103.234.94:/home/ubuntu/denoise_jittor/starter_code/result.zip \
+  ubuntu@36.103.236.211:/home/ubuntu/denoise_jittor/starter_code/result.zip \
   "/home/enovoczy/计图/result.zip"
 ```
