@@ -53,6 +53,8 @@ if __name__ == "__main__":
     parser.add_argument("--writer_save_dir", type=str, required=False, default=None)
     parser.add_argument("--writer_save_name", type=str, required=False, default=None)
     parser.add_argument("--epochs", type=int, required=False, default=None)
+    parser.add_argument("--load_ckpt_partial", action="store_true")
+    parser.add_argument("--load_ckpt_strict", action="store_true")
     args = parser.parse_args()
     
     # seed all
@@ -130,13 +132,17 @@ if __name__ == "__main__":
     if args.epochs is not None:
         trainer_config['epochs'] = args.epochs
     
-    # load ckpt
-    load_ckpt = task.get('load_ckpt', None)
-    if args.load_ckpt is not None:
-        load_ckpt = args.load_ckpt
+    # load ckpt: CLI overrides task yaml
+    load_ckpt = args.load_ckpt or task.get('load_ckpt', None)
     
     if load_ckpt is not None and model is not None:
-        model.load(load_ckpt)
+        load_partial = args.load_ckpt_partial or task.get('load_ckpt_partial', False)
+        if args.load_ckpt_strict:
+            model.load(load_ckpt)
+        elif load_partial:
+            model.load_partial(load_ckpt)
+        else:
+            model.load(load_ckpt)
     
     # get writer
     writer_config = task.get('writer', None)
