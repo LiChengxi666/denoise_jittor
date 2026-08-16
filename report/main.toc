@@ -1,0 +1,27 @@
+\contentsline {section}{\numberline {1}问题背景与任务定义}{4}{section.1}%
+\contentsline {subsection}{\numberline {1.1}输入、输出与数据限制}{4}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}评价指标}{4}{subsection.1.2}%
+\contentsline {section}{\numberline {2}vm\_strong 代码框架与整体流程}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Git 演化与默认入口}{4}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}配置化模块划分}{5}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}端到端数据流}{5}{subsection.2.3}%
+\contentsline {section}{\numberline {3}模型结构}{6}{section.3}%
+\contentsline {subsection}{\numberline {3.1}动态边卷积特征提取}{6}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}全局—局部融合与位移解码}{6}{subsection.3.2}%
+\contentsline {section}{\numberline {4}训练策略}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}网格采样与噪声合成}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}随机混合状态与位移监督}{7}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}联合损失}{7}{subsection.4.3}%
+\contentsline {section}{\numberline {5}推理与后处理}{7}{section.5}%
+\contentsline {section}{\numberline {6}技术贡献与工程改进}{8}{section.6}%
+\contentsline {section}{\numberline {7}实验结果与分析}{9}{section.7}%
+\contentsline {subsection}{\numberline {7.1}baseline 与 vm\_strong 配置对比}{9}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}云端训练、日志与选模流程}{9}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}训练曲线与日志分析}{10}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}提交包完整性与最终成绩}{11}{subsection.7.4}%
+\contentsline {section}{\numberline {8}局限、探索性分支与未来工作}{13}{section.8}%
+\contentsline {subsection}{\numberline {8.1}当前方案的局限}{13}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}已实现但未作为最终方案的探索}{13}{subsection.8.2}%
+\contentsline {section}{\numberline {9}队伍分工}{13}{section.9}%
+\contentsline {section}{\numberline {10}总结}{14}{section.10}%
+\contentsline {section}{\numberline {A}复现实验与报告编译}{14}{appendix.A}%

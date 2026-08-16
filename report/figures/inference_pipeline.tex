@@ -1,0 +1,45 @@
+\documentclass[tikz,border=5pt]{standalone}
+\usepackage[UTF8,fontset=fandol]{ctex}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\definecolor{navy}{HTML}{17365D}
+\definecolor{blue}{HTML}{5B9BD5}
+\definecolor{green}{HTML}{70AD47}
+\definecolor{orange}{HTML}{ED7D31}
+\begin{document}
+\begin{tikzpicture}[
+ font=\small,
+ node distance=7mm,
+ box/.style={draw=navy,thick,rounded corners=2pt,align=center,minimum height=13mm,minimum width=29mm,fill=blue!12},
+ iter/.style={box,fill=orange!16},
+ fuse/.style={box,fill=green!16},
+ arr/.style={-{Latex[length=2.2mm]},thick,draw=navy}
+]
+\node[box] (cloud) {整云输入\\$N\times3$};
+\node[box,right=of cloud] (fps) {FPS 选种子\\$K=\lceil6N/1200\rceil$};
+\node[box,right=of fps] (knn) {KNN 邻域\\每块 1200 点};
+\node[box,right=of knn] (center) {减去种子坐标\\局部中心化};
+\node[iter,right=of center] (encode) {动态图编码\\预测位移};
+\node[iter,right=of encode] (inner) {内部更新 $\times4$\\单步尺度 0.2};
+\node[fuse,right=of inner] (restore) {加回种子坐标\\恢复全局位置};
+\node[fuse,right=of restore] (weight) {指数距离权重\\$e^{-\bar d}$};
+\node[fuse,right=of weight] (scatter) {按原索引累加\\加权平均};
+\node[box,right=of scatter] (output) {同点数输出\\外部循环 $\times2$};
+
+\draw[arr] (cloud)--(fps);
+\draw[arr] (fps)--(knn);
+\draw[arr] (knn)--(center);
+\draw[arr] (center)--(encode);
+\draw[arr] (encode)--(inner);
+\draw[arr] (inner)--(restore);
+\draw[arr] (restore)--(weight);
+\draw[arr] (weight)--(scatter);
+\draw[arr] (scatter)--(output);
+\draw[arr] (output.south) -- ++(0,-8mm) -| node[pos=0.25,below]{下一轮重新构造 patch} (fps.south);
+
+\begin{scope}[on background layer]
+\node[draw=blue!65,rounded corners=4pt,fit=(fps)(knn)(center),inner sep=5pt,label={[blue!70!black]above:覆盖与分块}] {};
+\node[draw=orange!75,rounded corners=4pt,fit=(encode)(inner),inner sep=5pt,label={[orange!80!black]above:局部迭代}] {};
+\node[draw=green!60!black,rounded corners=4pt,fit=(restore)(weight)(scatter),inner sep=5pt,label={[green!50!black]above:重叠融合}] {};
+\end{scope}
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,42 @@
+mode: train
+debug: False
+
+components:
+  data: train_strong
+  transform: vm_enhanced
+  system: vm_enhanced
+  model: vm_enhanced
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.6
+  point_plane_loss: 0.25
+  global_cd_loss: 0.3
+  p2s_proxy_loss: 0.4
+  normal_consistency_loss: 0.1
+  offset_reg: 0.005
+  repulsion_loss: 0.02
+  scale_loss: 0.02
+
+optimizer:
+  __target__: adam
+  lr: 0.00003
+
+trainer:
+  epochs: 150
+  save_every: 10
+  save_best: True
+  save_last: True
+  save_last_every: 1
+  validate_every: 1
+  log_dir: logs
+  experiment_name: vm_enhanced
+  log_to_file: True
+  metrics_csv: metrics.csv
+  log_config: True
+  log_every_n_steps: 0
+  grad_clip_norm: 1.0
+  lr_scheduler:
+    __target__: cosine
+    warmup_epochs: 5
+    min_lr: 0.000003

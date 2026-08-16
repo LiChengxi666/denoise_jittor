@@ -1,0 +1,5 @@
+checkpoint,kind,epoch,val_loss_sum
+/home/enovoczy/计图/starter_code/experiments/vm_strong/checkpoint_best.pkl,best,4,0.01862215
+/home/enovoczy/计图/starter_code/experiments/vm_strong/checkpoint_9.pkl,epoch,10,0.01614375
+/home/enovoczy/计图/starter_code/experiments/vm_strong/checkpoint_39.pkl,epoch,40,0.01549090
+/home/enovoczy/计图/starter_code/experiments/vm_strong/checkpoint_last.pkl,last,10,0.01805137

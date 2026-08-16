@@ -1,0 +1,14 @@
+mode: predict
+debug: False
+load_ckpt: experiments/vm_cd/checkpoint_best.pkl
+
+components:
+  data: predict
+  transform: predict
+  system: vm
+  model: vm_cd
+
+writer:
+  __target__: vm
+  save_dir: tmp_predict
+  save_name: denoised

@@ -1,0 +1,38 @@
+mode: train
+debug: False
+load_ckpt: experiments/vm_strong/checkpoint_39.pkl
+
+components:
+  data: train_sprint_small
+  transform: vm_strong
+  system: vm_sprint_recovery
+  model: vm_strong
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.25
+  point_plane_loss: 0.30
+  offset_reg: 0.01
+
+optimizer:
+  __target__: adam
+  lr: 0.000001
+
+trainer:
+  epochs: 2
+  save_every: 1
+  save_best: True
+  save_last: True
+  save_last_every: 1
+  validate_every: 1
+  log_dir: logs
+  experiment_name: vm_sprint_recovery
+  log_to_file: True
+  metrics_csv: metrics.csv
+  log_config: True
+  log_every_n_steps: 0
+  grad_clip_norm: 1.0
+  lr_scheduler:
+    __target__: cosine
+    warmup_epochs: 0
+    min_lr: 0.0000003
