@@ -15,18 +15,26 @@ import os
 import jittor as jt
 
 from ..data.asset import Asset
-from ..data.transform import Transform 
+from ..data.transform import Transform
+
+
+def _tensor_shape(value):
+    if hasattr(value, "shape"):
+        return tuple(value.shape)
+    return tuple(np.asarray(value).shape)
+
 
 @dataclass
 class ModelInput():
     asset: Asset
-    tokens: Optional[ndarray]=None
+    tokens: Optional[ndarray] = None
+
 
 class ModelSpec(nn.Module, ABC):
-    
+
     model_config: Dict
     transform_config: Dict
-    
+
     @abstractmethod
     def __init__(self, model_config, transform_config):
         super().__init__()
@@ -40,16 +48,16 @@ class ModelSpec(nn.Module, ABC):
             transform_cfg = OmegaConf.to_container(transform_config, resolve=True)
         else:
             transform_cfg = transform_config
-        self.model_config = model_cfg # type: ignore
-        self.transform_config = transform_cfg # type: ignore
+        self.model_config = model_cfg  # type: ignore
+        self.transform_config = transform_cfg  # type: ignore
         self._is_predict = False
-    
+
     def is_predict(self):
         return self._is_predict
-    
+
     def set_predict(self, is_predict: bool):
         self._is_predict = is_predict
-    
+
     @final
     def _process_fn(self, batch: List[Asset]) -> List[Dict]:
         n_batch = self.process_fn(batch)
@@ -66,42 +74,83 @@ class ModelSpec(nn.Module, ABC):
                 non['asset'] = deepcopy(b)
                 n_batch[i]['non'] = non
         return n_batch
-    
+
     @abstractmethod
     def process_fn(self, batch: List[Asset]) -> List[Dict]:
         """
         Fetch data from dataloader and turn it into Tensor objects.
         """
         raise NotImplementedError()
-    
+
     def compile_model(self):
         """
         Compile the model. Do this before training and after loading state dicts.
         """
         pass
-    
+
     @classmethod
     def load_ckpt(cls, checkpoint_path: str):
         model = jt.load(checkpoint_path)
         return model
-    
+
+    def load_partial(self, checkpoint_path: str):
+        """
+        Load only parameters whose names and shapes match the current model.
+        """
+        if not os.path.isfile(checkpoint_path):
+            raise FileNotFoundError(f"checkpoint not found: {checkpoint_path}")
+
+        source_state = jt.load(checkpoint_path)
+        if not isinstance(source_state, dict):
+            if hasattr(source_state, "state_dict"):
+                source_state = source_state.state_dict()
+            else:
+                raise ValueError(f"unsupported checkpoint format: {checkpoint_path}")
+
+        target_state = self.state_dict()
+        loaded = 0
+        skipped_shape = 0
+        skipped_missing = 0
+        for name, param in target_state.items():
+            if name not in source_state:
+                skipped_missing += 1
+                continue
+            src = source_state[name]
+            if _tensor_shape(src) != _tensor_shape(param):
+                skipped_shape += 1
+                continue
+            param.assign(src)
+            loaded += 1
+
+        total = len(target_state)
+        print(
+            f"\033[92mPartial checkpoint load: {checkpoint_path}\033[0m "
+            f"loaded={loaded}/{total}, skipped_shape={skipped_shape}, skipped_missing={skipped_missing}"
+        )
+        return {
+            "loaded": loaded,
+            "total": total,
+            "skipped_shape": skipped_shape,
+            "skipped_missing": skipped_missing,
+        }
+
     def get_train_transform(self) -> Optional[Transform]:
         cfg = self.transform_config.get('train_transform', None)
         if cfg is None:
             return None
         return Transform.parse(**cfg)
-    
+
     def get_validate_transform(self) -> Optional[Transform]:
         cfg = self.transform_config.get('validate_transform', None)
         if cfg is None:
             return None
         return Transform.parse(**cfg)
-    
+
     def get_predict_transform(self) -> Optional[Transform]:
         cfg = self.transform_config.get('predict_transform', None)
         if cfg is None:
             return None
         return Transform.parse(**cfg)
-    
+
     def predict_step(self, batch: Dict) -> List[Dict]:
         raise NotImplementedError()
