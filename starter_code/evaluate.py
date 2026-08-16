@@ -118,7 +118,7 @@ def normalize_to_unit_sphere(pc):
 
 # ======================== Chamfer Distance ========================
 
-def chamfer_distance(pc_a, pc_b, normalize=True):
+def chamfer_distance(pc_a, pc_b, normalize=True, return_components=False):
     """
     CD(A, B) = mean_{a∈A} min_{b∈B} ||a-b||² + mean_{b∈B} min_{a∈A} ||b-a||²
 
@@ -128,6 +128,8 @@ def chamfer_distance(pc_a, pc_b, normalize=True):
     if normalize:
         pc_b, center, scale = normalize_to_unit_sphere(pc_b)
         if scale < 1e-12:
+            if return_components:
+                return 0.0, 0.0, 0.0
             return 0.0
         pc_a = (pc_a - center) / scale
 
@@ -137,7 +139,12 @@ def chamfer_distance(pc_a, pc_b, normalize=True):
     tree_a = cKDTree(pc_a)
     dist_b2a, _ = tree_a.query(pc_b, k=1)
 
-    return (dist_a2b ** 2).mean() + (dist_b2a ** 2).mean()
+    a_to_b = float((dist_a2b ** 2).mean())
+    b_to_a = float((dist_b2a ** 2).mean())
+    total = a_to_b + b_to_a
+    if return_components:
+        return total, a_to_b, b_to_a
+    return total
 
 
 # ======================== Point-to-Surface ========================
@@ -231,15 +238,19 @@ def load_meta(meta_dir, key):
 # ======================== 单样本评测（用于并行） ========================
 
 def evaluate_single(args_tuple):
-    """评测单个样本，返回 (key, cd_pred, cd_noisy, cd_score, p2s_pred, p2s_noisy, p2s_score)"""
+    """评测单个样本，返回 CD/P2S 及 CD 双向分项。"""
     key, pred_path, gt_path, noisy_path, mesh_path, p2s_normalize, meta = args_tuple
 
     pc_pred = load_pointcloud(pred_path)
     pc_gt = load_pointcloud(gt_path)
     pc_noisy = load_pointcloud(noisy_path)
 
-    cd_pred = chamfer_distance(pc_pred, pc_gt, normalize=True)
-    cd_noisy = chamfer_distance(pc_noisy, pc_gt, normalize=True)
+    cd_pred, cd_pred_to_gt, cd_gt_to_pred = chamfer_distance(
+        pc_pred, pc_gt, normalize=True, return_components=True
+    )
+    cd_noisy, cd_noisy_to_gt, cd_gt_to_noisy = chamfer_distance(
+        pc_noisy, pc_gt, normalize=True, return_components=True
+    )
     cd_s = metric_to_score(cd_pred, cd_noisy)
 
     p2s_pred_val = None
@@ -267,7 +278,19 @@ def evaluate_single(args_tuple):
             if p2s_pred_val is not None and p2s_noisy_val is not None:
                 p2s_s = metric_to_score(p2s_pred_val, p2s_noisy_val)
 
-    return (key, cd_pred, cd_noisy, cd_s, p2s_pred_val, p2s_noisy_val, p2s_s)
+    return (
+        key,
+        cd_pred,
+        cd_noisy,
+        cd_s,
+        cd_pred_to_gt,
+        cd_gt_to_pred,
+        cd_noisy_to_gt,
+        cd_gt_to_noisy,
+        p2s_pred_val,
+        p2s_noisy_val,
+        p2s_s,
+    )
 
 
 # ======================== 主流程 ========================
@@ -361,14 +384,34 @@ def main():
     p2s_scores = []
     cd_preds = []
     cd_noisys = []
+    cd_pred_to_gts = []
+    cd_gt_to_preds = []
+    cd_noisy_to_gts = []
+    cd_gt_to_noisys = []
     p2s_preds = []
     p2s_noisys = []
     rows = []
 
-    for key, cd_pred, cd_noisy, cd_s, p2s_pred, p2s_noisy, p2s_s in results:
+    for (
+        key,
+        cd_pred,
+        cd_noisy,
+        cd_s,
+        cd_pred_to_gt,
+        cd_gt_to_pred,
+        cd_noisy_to_gt,
+        cd_gt_to_noisy,
+        p2s_pred,
+        p2s_noisy,
+        p2s_s,
+    ) in results:
         cd_scores.append(cd_s)
         cd_preds.append(cd_pred)
         cd_noisys.append(cd_noisy)
+        cd_pred_to_gts.append(cd_pred_to_gt)
+        cd_gt_to_preds.append(cd_gt_to_pred)
+        cd_noisy_to_gts.append(cd_noisy_to_gt)
+        cd_gt_to_noisys.append(cd_gt_to_noisy)
         if p2s_s is not None:
             p2s_scores.append(p2s_s)
             p2s_preds.append(p2s_pred)
@@ -382,6 +425,10 @@ def main():
             "key": key,
             "cd_pred": cd_pred,
             "cd_noisy": cd_noisy,
+            "cd_pred_to_gt": cd_pred_to_gt,
+            "cd_gt_to_pred": cd_gt_to_pred,
+            "cd_noisy_to_gt": cd_noisy_to_gt,
+            "cd_gt_to_noisy": cd_gt_to_noisy,
             "cd_score": cd_s,
             "p2s_pred": "" if p2s_pred is None else p2s_pred,
             "p2s_noisy": "" if p2s_noisy is None else p2s_noisy,
@@ -412,7 +459,10 @@ def main():
         os.makedirs(os.path.dirname(args.csv_path) or ".", exist_ok=True)
         with open(args.csv_path, "w", newline="") as f:
             fieldnames = [
-                "key", "cd_pred", "cd_noisy", "cd_score",
+                "key", "cd_pred", "cd_noisy",
+                "cd_pred_to_gt", "cd_gt_to_pred",
+                "cd_noisy_to_gt", "cd_gt_to_noisy",
+                "cd_score",
                 "p2s_pred", "p2s_noisy", "p2s_score", "final_score",
             ]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -432,6 +482,10 @@ def main():
     print("-" * 65)
     print(f"  平均 CD_pred:       {np.mean(cd_preds):.8f}" if cd_preds else "")
     print(f"  平均 CD_noisy:      {np.mean(cd_noisys):.8f}" if cd_noisys else "")
+    print(f"  平均 CD_pred_to_gt: {np.mean(cd_pred_to_gts):.8f}" if cd_pred_to_gts else "")
+    print(f"  平均 CD_gt_to_pred: {np.mean(cd_gt_to_preds):.8f}" if cd_gt_to_preds else "")
+    print(f"  平均 CD_noisy_to_gt:{np.mean(cd_noisy_to_gts):.8f}" if cd_noisy_to_gts else "")
+    print(f"  平均 CD_gt_to_noisy:{np.mean(cd_gt_to_noisys):.8f}" if cd_gt_to_noisys else "")
     print(f"  CD 得分:            {mean_cd_score:.2f} / 100.00")
     if has_p2s:
         print(f"  平均 P2S_pred:      {np.mean(p2s_preds):.8f}")
