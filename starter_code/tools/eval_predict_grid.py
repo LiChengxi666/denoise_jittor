@@ -16,6 +16,63 @@ import yaml
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+STRONG_GRID_DEFAULTS = {
+    "step_sizes": "0.65,0.8",
+    "predict_steps": "2,3",
+    "inner_steps": "4",
+    "patch_sizes": "1200",
+    "alpha_blends": "0.9,1.0",
+    "momentums": "0.0,0.6",
+    "step_decays": "linear",
+}
+
+PRESET_OVERRIDES = {
+    "strong": {
+        "checkpoints": "experiments/vm_strong/checkpoint_*.pkl",
+        "base_task": "configs/task/predict_val.yaml",
+        "base_model": "configs/model/vm_strong.yaml",
+        "csv_path": "experiments/vm_strong/val_grid.csv",
+        "p2s_floor": None,
+        **STRONG_GRID_DEFAULTS,
+    },
+    "cvm2_p0": {
+        "checkpoints": "experiments/vm_cvm2_msattn_conf_p0/checkpoint_*.pkl",
+        "base_task": "configs/task/predict_val_cvm2_p0.yaml",
+        "base_model": "configs/model/vm_cvm2_msattn_conf.yaml",
+        "csv_path": "diagnostics/cvm2_p0_ckpts.csv",
+        "p2s_floor": 80.37,
+        # Centered on vm_cvm2_msattn_conf.yaml defaults: step=0.75, alpha=0.95, momentum=0.3
+        "step_sizes": "0.65,0.75,0.85",
+        "predict_steps": "2,3",
+        "inner_steps": "4",
+        "patch_sizes": "1200",
+        "alpha_blends": "0.9,0.95,1.0",
+        "momentums": "0.0,0.3",
+        "step_decays": "linear",
+    },
+}
+
+
+def _cli_flag_set(*flags: str) -> bool:
+    """Return True if any flag variant was explicitly passed on the CLI."""
+    for flag in flags:
+        for arg in sys.argv[1:]:
+            if arg == flag or arg.startswith(flag + "="):
+                return True
+    return False
+
+
+def apply_preset(args, preset_name: str):
+    """Fill preset fields only when the user did not override them on the CLI."""
+    applied = []
+    for key, value in PRESET_OVERRIDES[preset_name].items():
+        flag_underscore = "--" + key
+        flag_dash = "--" + key.replace("_", "-")
+        if not _cli_flag_set(flag_underscore, flag_dash):
+            setattr(args, key, value)
+            applied.append(key)
+    return applied
+
 
 def parse_list(text, cast):
     if text is None or text == "":
@@ -102,6 +159,8 @@ def tail(text, n=1200):
 
 def main():
     parser = argparse.ArgumentParser(description="Grid-search validation inference settings.")
+    parser.add_argument("--preset", choices=sorted(PRESET_OVERRIDES.keys()), default=None,
+                        help="Preset defaults for checkpoints/model/grid; explicit CLI flags override preset.")
     parser.add_argument("--checkpoints", default="experiments/vm_strong/checkpoint_*.pkl")
     parser.add_argument("--base_task", default="configs/task/predict_val.yaml")
     parser.add_argument("--base_model", default="configs/model/vm_strong.yaml")
@@ -110,6 +169,8 @@ def main():
     parser.add_argument("--mesh_dir", default="../dataset_train")
     parser.add_argument("--meta_dir", default="val_meta")
     parser.add_argument("--p2s_normalize", choices=["ref_gt", "meta", "none"], default="meta")
+    parser.add_argument("--p2s_floor", type=float, default=None,
+                        help="Mark runs with p2s_score below this threshold as p2s_fail.")
     parser.add_argument("--csv_path", default="experiments/vm_strong/val_grid.csv")
     parser.add_argument("--step_sizes", default="0.6,0.7,0.8,0.9")
     parser.add_argument("--predict_steps", default="1,2,3")
@@ -118,11 +179,21 @@ def main():
     parser.add_argument("--alpha_blends", default="0.85,0.95,1.0")
     parser.add_argument("--momentums", default="0.0,0.3,0.6")
     parser.add_argument("--step_decays", default="linear")
-    parser.add_argument("--p2s_floor", type=float, default=80.37)
     parser.add_argument("--workers", default="8")
     parser.add_argument("--allow_cd_only", action="store_true")
     parser.add_argument("--keep_predictions", action="store_true")
     args = parser.parse_args()
+
+    if args.preset is not None:
+        applied = apply_preset(args, args.preset)
+        print(
+            f"Using preset '{args.preset}' "
+            f"(applied: {', '.join(applied) if applied else 'no overrides; all flags set on CLI'})"
+        )
+        print(
+            f"  checkpoints={args.checkpoints}, base_model={args.base_model}, "
+            f"step_sizes={args.step_sizes}, alpha_blends={args.alpha_blends}, momentums={args.momentums}"
+        )
 
     checkpoints = sorted(glob.glob(os.path.join(ROOT, args.checkpoints)))
     if not checkpoints:
@@ -211,28 +282,40 @@ def main():
             and metrics["p2s_score"] is None
         )
 
-        p2s_pass = (
-            metrics["p2s_score"] is not None
-            and float(metrics["p2s_score"]) >= float(args.p2s_floor)
-        )
+        p2s_pass = ""
+        if args.p2s_floor is not None and metrics["p2s_score"] is not None:
+            p2s_pass = metrics["p2s_score"] >= args.p2s_floor
+
         cd_priority_score = ""
-        if not missing_required_p2s and metrics["cd_score"] is not None and p2s_pass:
+        if (
+            not missing_required_p2s
+            and metrics["cd_score"] is not None
+            and metrics["p2s_score"] is not None
+            and p2s_pass is not False
+        ):
             cd_priority_score = 0.7 * metrics["cd_score"] + 0.3 * metrics["p2s_score"]
 
         status = "ok" if metrics["score"] is not None and not missing_required_p2s else "failed"
+        if status == "ok" and p2s_pass is False:
+            status = "p2s_fail"
         if missing_required_p2s:
             failure_tail = "P2S metric missing while p2s_normalize is not none; pass --allow_cd_only to accept CD-only runs. "
             failure_tail += tail(pred_out + "\n" + eval_out)
+        elif status == "failed":
+            failure_tail = tail(pred_out + "\n" + eval_out)
         else:
-            failure_tail = "" if status == "ok" else tail(pred_out + "\n" + eval_out)
+            failure_tail = ""
 
+        has_metrics = metrics["score"] is not None
         row = {
             "run_id": run_id,
             "checkpoint": os.path.relpath(ckpt, ROOT),
-            "score": metrics["score"] if status == "ok" and metrics["score"] is not None else "",
+            "score": metrics["score"] if has_metrics and status in ("ok", "p2s_fail") else "",
             "cd_priority_score": cd_priority_score,
             "cd_score": metrics["cd_score"] if metrics["cd_score"] is not None else "",
             "p2s_score": metrics["p2s_score"] if metrics["p2s_score"] is not None else "",
+            "p2s_floor": args.p2s_floor if args.p2s_floor is not None else "",
+            "p2s_pass": p2s_pass if p2s_pass != "" else "",
             "mean_cd_pred": metrics["mean_cd_pred"] if metrics["mean_cd_pred"] is not None else "",
             "mean_cd_noisy": metrics["mean_cd_noisy"] if metrics["mean_cd_noisy"] is not None else "",
             "mean_cd_pred_to_gt": metrics["mean_cd_pred_to_gt"] if metrics["mean_cd_pred_to_gt"] is not None else "",
@@ -241,8 +324,6 @@ def main():
             "mean_cd_gt_to_noisy": metrics["mean_cd_gt_to_noisy"] if metrics["mean_cd_gt_to_noisy"] is not None else "",
             "mean_p2s_pred": metrics["mean_p2s_pred"] if metrics["mean_p2s_pred"] is not None else "",
             "mean_p2s_noisy": metrics["mean_p2s_noisy"] if metrics["mean_p2s_noisy"] is not None else "",
-            "p2s_floor": args.p2s_floor,
-            "p2s_pass": p2s_pass,
             "predict_step_size": model_cfg.get("predict_step_size", ""),
             "predict_num_steps": model_cfg.get("predict_num_steps", ""),
             "denoise_inner_steps": model_cfg.get("denoise_inner_steps", ""),
@@ -265,14 +346,22 @@ def main():
         if not args.keep_predictions:
             shutil.rmtree(os.path.join(ROOT, pred_dir), ignore_errors=True)
 
-        if status != "ok":
+        if status == "failed":
             print(pred_out[-4000:])
             print(eval_out[-4000:])
 
-    ranked = sorted([r for r in rows if r["cd_priority_score"] != ""], key=lambda r: float(r["cd_priority_score"]), reverse=True)
+    ranked = sorted(
+        [r for r in rows if r["cd_priority_score"] != "" and r.get("p2s_pass") is not False],
+        key=lambda r: float(r["cd_priority_score"]),
+        reverse=True,
+    )
     if ranked:
         print("best_by_cd_priority:", ranked[0])
-    ranked_final = sorted([r for r in rows if r["score"] != ""], key=lambda r: float(r["score"]), reverse=True)
+    ranked_final = sorted(
+        [r for r in rows if r["score"] != "" and r.get("p2s_pass") is not False],
+        key=lambda r: float(r["score"]),
+        reverse=True,
+    )
     if ranked_final:
         print("best_by_final_score:", ranked_final[0])
     print(f"wrote {args.csv_path}")
