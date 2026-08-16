@@ -1,0 +1,14 @@
+experiment,checkpoint,epoch_tag,score,cd_score,p2s_score,mean_cd_pred,mean_p2s_pred,pred_dir
+vm_cd,checkpoint_9,epoch_10,38.45,29.93,46.96,0.00015693,0.00008227,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_cd_checkpoint_9
+vm_cd,checkpoint_best,best,39.50,30.71,48.30,0.00015875,0.00008509,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_cd_checkpoint_best
+vm_cd,checkpoint_last,last,55.76,44.62,66.90,0.00012201,0.00005286,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_cd_checkpoint_last
+vm_strong,checkpoint_9,epoch_10,57.49,45.73,69.25,0.00011202,0.00004131,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_9
+vm_strong,checkpoint_19,epoch_20,37.88,29.34,46.43,0.00016170,0.00008754,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_19
+vm_strong,checkpoint_29,epoch_30,51.93,41.02,62.83,0.00012887,0.00005758,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_29
+vm_strong,checkpoint_39,epoch_40,62.98,50.56,75.40,0.00010730,0.00004014,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_39
+vm_strong,checkpoint_49,epoch_50,51.33,40.18,62.49,0.00013541,0.00006342,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_49
+vm_strong,checkpoint_59,epoch_60,51.10,40.08,62.13,0.00013585,0.00006419,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_59
+vm_strong,checkpoint_69,epoch_70,56.60,44.68,68.51,0.00012501,0.00005483,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_69
+vm_strong,checkpoint_79,epoch_80,56.51,44.43,68.59,0.00012559,0.00005452,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_79
+vm_strong,checkpoint_best,best,56.60,44.68,68.51,0.00012502,0.00005483,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_best
+vm_strong,checkpoint_last,last,55.52,43.61,67.44,0.00012723,0.00005588,/home/ubuntu/denoise_jittor/eval_compare_20260625_005940/pred_vm_strong_checkpoint_last
