@@ -1,0 +1,46 @@
+\documentclass[tikz,border=5pt]{standalone}
+\usepackage[UTF8,fontset=fandol]{ctex}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\definecolor{navy}{HTML}{17365D}
+\definecolor{blue}{HTML}{5B9BD5}
+\definecolor{green}{HTML}{70AD47}
+\definecolor{orange}{HTML}{ED7D31}
+\definecolor{graybox}{HTML}{F2F2F2}
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm and 8mm,
+  box/.style={draw=navy,rounded corners=2pt,thick,align=center,minimum height=9mm,minimum width=24mm,fill=graybox},
+  cloud/.style={box,fill=blue!16},
+  local/.style={box,fill=green!15},
+  log/.style={box,fill=orange!16},
+  arr/.style={-{Latex[length=2.2mm]},thick,draw=navy}
+]
+\node[cloud] (server) {云服务器\\RTX 4090 / tmux};
+\node[cloud,right=of server] (train) {分段训练\\150 epoch};
+\node[cloud,right=of train] (ckpt) {checkpoint\\last/best/epoch};
+\node[cloud,right=of ckpt] (eval) {固定验证集\\CD/P2S 评测};
+\node[log,below=9mm of eval] (grid) {网格选模\\eval\_predict\_grid};
+\node[log,below=9mm of train] (logs) {日志目录\\logs/vm\_strong/};
+\node[local,below=9mm of server] (sync) {本地同步\\rsync 日志/权重};
+\node[local,right=of sync] (pred) {A 榜推理\\predict\_vm.yaml};
+\node[local,right=of pred] (zip) {提交包\\result.zip};
+
+\draw[arr] (server)--(train);
+\draw[arr] (train)--(ckpt);
+\draw[arr] (ckpt)--(eval);
+\draw[arr] (eval)--(grid);
+\draw[arr] (train)--(logs);
+\draw[arr] (logs)--(sync);
+\draw[arr] (grid)--(sync);
+\draw[arr] (sync)--(pred);
+\draw[arr] (pred)--(zip);
+
+\begin{scope}[on background layer]
+  \node[draw=navy,thick,rounded corners=3pt,inner sep=5pt,fill=blue!6,
+        fit=(server)(train)(ckpt)(eval)(grid)(logs),label={[navy]above:云端 vm\_strong 训练与选模}] {};
+  \node[draw=navy,thick,rounded corners=3pt,inner sep=5pt,fill=green!6,
+        fit=(sync)(pred)(zip),label={[navy]above:本地推理与提交}] {};
+\end{scope}
+\end{tikzpicture}
+\end{document}

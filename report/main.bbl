@@ -1,0 +1,305 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{wang2026pcdsurvey}{article}{}{}
+      \name{author}{6}{}{%
+        {{hash=3404b7846a4c136990c9640c90304a3a}{%
+           family={王兴涛},
+           familyi={王\bibinitperiod}}}%
+        {{hash=bc075772f5a30f308da03a5117f0c7f4}{%
+           family={代梦丽},
+           familyi={代\bibinitperiod}}}%
+        {{hash=12f42512662f19dee94fdce5f30b3c6e}{%
+           family={于嘉阔},
+           familyi={于\bibinitperiod}}}%
+        {{hash=c99e5bc50efacab38133ab1c93f0cdfa}{%
+           family={李文瑞},
+           familyi={李\bibinitperiod}}}%
+        {{hash=01aa68a5df3cb8b5176fac02d2f066b0}{%
+           family={满珩玉},
+           familyi={满\bibinitperiod}}}%
+        {{hash=b9f1ebc12645094c715bf94d2fc5e434}{%
+           family={范晓鹏},
+           familyi={范\bibinitperiod}}}%
+      }
+      \strng{namehash}{bd2a1cecaa59d64b1dafefffb5fe8576}
+      \strng{fullhash}{8fcaac4b29b51a26327e3c1255c14698}
+      \strng{fullhashraw}{8fcaac4b29b51a26327e3c1255c14698}
+      \strng{bibnamehash}{8fcaac4b29b51a26327e3c1255c14698}
+      \strng{authorbibnamehash}{8fcaac4b29b51a26327e3c1255c14698}
+      \strng{authornamehash}{bd2a1cecaa59d64b1dafefffb5fe8576}
+      \strng{authorfullhash}{8fcaac4b29b51a26327e3c1255c14698}
+      \strng{authorfullhashraw}{8fcaac4b29b51a26327e3c1255c14698}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{智能系统学报}
+      \field{note}{网络首发，本地文献：点云去噪综述}
+      \field{title}{基于深度学习的点云去噪方法综述}
+      \field{year}{2026}
+    \endentry
+    \entry{hu2026lecture08}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=db35044278d2cd03e613f025032ba608}{%
+           family={胡事民},
+           familyi={胡\bibinitperiod}}}%
+      }
+      \strng{namehash}{db35044278d2cd03e613f025032ba608}
+      \strng{fullhash}{db35044278d2cd03e613f025032ba608}
+      \strng{fullhashraw}{db35044278d2cd03e613f025032ba608}
+      \strng{bibnamehash}{db35044278d2cd03e613f025032ba608}
+      \strng{authorbibnamehash}{db35044278d2cd03e613f025032ba608}
+      \strng{authornamehash}{db35044278d2cd03e613f025032ba608}
+      \strng{authorfullhash}{db35044278d2cd03e613f025032ba608}
+      \strng{authorfullhashraw}{db35044278d2cd03e613f025032ba608}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{清华大学《计算机图形学基础》课程讲义}
+      \field{note}{本地文献：Lecture 08 讲义}
+      \field{title}{点云去噪——网格细分与简化}
+      \field{year}{2026}
+    \endentry
+    \entry{edirimuni2024straightpcf}{inproceedings}{}{}
+      \name{author}{6}{}{%
+        {{hash=62810038155628687d48888b62d5caaf}{%
+           family={Silva\bibnamedelima Edirimuni},
+           familyi={S\bibinitperiod\bibinitdelim E\bibinitperiod},
+           given={Dasith},
+           giveni={D\bibinitperiod},
+           prefix={de},
+           prefixi={d\bibinitperiod}}}%
+        {{hash=49fca44c53b9c9d3afe96bccd3e984d6}{%
+           family={Lu},
+           familyi={L\bibinitperiod},
+           given={Xuequan},
+           giveni={X\bibinitperiod}}}%
+        {{hash=56ba559f18e74cf681fe113aba3fa9af}{%
+           family={Li},
+           familyi={L\bibinitperiod},
+           given={Gang},
+           giveni={G\bibinitperiod}}}%
+        {{hash=8001773eb33d8520b85bf2cd2d8f03bd}{%
+           family={Wei},
+           familyi={W\bibinitperiod},
+           given={Lei},
+           giveni={L\bibinitperiod}}}%
+        {{hash=b89ff1679397e08b9131ecc3fe6ee707}{%
+           family={Robles-Kelly},
+           familyi={R\bibinithyphendelim K\bibinitperiod},
+           given={Antonio},
+           giveni={A\bibinitperiod}}}%
+        {{hash=bfb71cf26620b3b038faaa059c3341f7}{%
+           family={Li},
+           familyi={L\bibinitperiod},
+           given={Hongdong},
+           giveni={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{9ff2c446d6131072a73f5049275227a0}
+      \strng{fullhash}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \strng{fullhashraw}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \strng{bibnamehash}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \strng{authorbibnamehash}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \strng{authornamehash}{9ff2c446d6131072a73f5049275227a0}
+      \strng{authorfullhash}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \strng{authorfullhashraw}{c803e33b4c4c69b14b833dc8bd0caf83}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition}
+      \field{note}{本地文献：StraightPCF CVPR 2024 论文}
+      \field{title}{{StraightPCF}: Straight Point Cloud Filtering}
+      \field{year}{2024}
+    \endentry
+    \entry{hu2023mspoint}{article}{}{}
+      \name{author}{6}{}{%
+        {{hash=864cc8f12c305d4c2b71e780c3c7cd89}{%
+           family={胡豪},
+           familyi={胡\bibinitperiod}}}%
+        {{hash=41d57cfc39f99362e9f637ae2eb960f5}{%
+           family={王琪冰},
+           familyi={王\bibinitperiod}}}%
+        {{hash=a7d22220eeb59854c5e0dc30cf76d641}{%
+           family={陆佳炜},
+           familyi={陆\bibinitperiod}}}%
+        {{hash=dbe34736e212aa12e97d69822aac085a}{%
+           family={苏宏业},
+           familyi={苏\bibinitperiod}}}%
+        {{hash=e14b36c97f65751e4624d4ebc6bcd9d1}{%
+           family={来见坤},
+           familyi={来\bibinitperiod}}}%
+        {{hash=3a843940cd5836877efe33a90d4d35f6}{%
+           family={肖刚},
+           familyi={肖\bibinitperiod}}}%
+      }
+      \strng{namehash}{5f415759def698460d9be3b0b3079945}
+      \strng{fullhash}{316bd5648eda762cbe3761de143d9cb5}
+      \strng{fullhashraw}{316bd5648eda762cbe3761de143d9cb5}
+      \strng{bibnamehash}{316bd5648eda762cbe3761de143d9cb5}
+      \strng{authorbibnamehash}{316bd5648eda762cbe3761de143d9cb5}
+      \strng{authornamehash}{5f415759def698460d9be3b0b3079945}
+      \strng{authorfullhash}{316bd5648eda762cbe3761de143d9cb5}
+      \strng{authorfullhashraw}{316bd5648eda762cbe3761de143d9cb5}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{激光与光电子学进展}
+      \field{note}{本地文献：MSPoint 论文}
+      \field{number}{16}
+      \field{title}{{MSPoint}：基于多尺度分布分数的点云去噪网络}
+      \field{volume}{60}
+      \field{year}{2023}
+      \verb{doi}
+      \verb 10.3788/LOP222402
+      \endverb
+    \endentry
+    \entry{guan2025eiscd}{article}{}{}
+      \name{author}{5}{}{%
+        {{hash=4e383250284d14665dae97c2b2cbc223}{%
+           family={管雨辰},
+           familyi={管\bibinitperiod}}}%
+        {{hash=0551090fbe846184fdedd075d990ebc7}{%
+           family={胡宇},
+           familyi={胡\bibinitperiod}}}%
+        {{hash=6f6f721352d7a2a63e04b00ad2033825}{%
+           family={张肖莹},
+           familyi={张\bibinitperiod}}}%
+        {{hash=3949a944c60b51ee67584de2c5916f4e}{%
+           family={李昱卓},
+           familyi={李\bibinitperiod}}}%
+        {{hash=a80a1c849d0debcd7f96d620e55a7c04}{%
+           family={郁钱},
+           familyi={郁\bibinitperiod}}}%
+      }
+      \strng{namehash}{ee2233c296af347911253a9ca7e88885}
+      \strng{fullhash}{93db41b6e68b87caa35905b93604f3d8}
+      \strng{fullhashraw}{93db41b6e68b87caa35905b93604f3d8}
+      \strng{bibnamehash}{93db41b6e68b87caa35905b93604f3d8}
+      \strng{authorbibnamehash}{93db41b6e68b87caa35905b93604f3d8}
+      \strng{authornamehash}{ee2233c296af347911253a9ca7e88885}
+      \strng{authorfullhash}{93db41b6e68b87caa35905b93604f3d8}
+      \strng{authorfullhashraw}{93db41b6e68b87caa35905b93604f3d8}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{中国图象图形学报}
+      \field{note}{本地文献：外部迭代分数模型论文}
+      \field{number}{7}
+      \field{title}{外部迭代分数模型点云去噪方法}
+      \field{volume}{30}
+      \field{year}{2025}
+      \field{pages}{2364\bibrangedash 2377}
+      \range{pages}{14}
+      \verb{doi}
+      \verb 10.11834/jig.240636
+      \endverb
+    \endentry
+    \entry{hu2024pointcloudtech}{misc}{}{}
+      \name{author}{2}{}{%
+        {{hash=db35044278d2cd03e613f025032ba608}{%
+           family={胡事民},
+           familyi={胡\bibinitperiod}}}%
+        {{hash=95625097f0d7386a75bf24096c33044c}{%
+           family={徐群策},
+           familyi={徐\bibinitperiod}}}%
+      }
+      \strng{namehash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{fullhash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{fullhashraw}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{bibnamehash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{authorbibnamehash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{authornamehash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{authorfullhash}{1e998df27f185d7a1cda97c689485c9a}
+      \strng{authorfullhashraw}{1e998df27f185d7a1cda97c689485c9a}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{清华大学《计算机图形学基础》课程讲义}
+      \field{note}{本地文献：点云相关技术讲义}
+      \field{title}{点云相关技术}
+      \field{year}{2024}
+    \endentry
+    \entry{lin2023infocd}{inproceedings}{}{}
+      \name{author}{7}{}{%
+        {{hash=d1b1f83b390cd53451bb6c3ba6be7714}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={Fangzhou},
+           giveni={F\bibinitperiod}}}%
+        {{hash=168d8d9e3c8ff70afc306e42fabf2490}{%
+           family={Yue},
+           familyi={Y\bibinitperiod},
+           given={Yun},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=3a9cbe10f0fda472400388288c74f3d2}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Ziming},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=27804f70f517e882e54ea05d2adad5ec}{%
+           family={Hou},
+           familyi={H\bibinitperiod},
+           given={Songlin},
+           giveni={S\bibinitperiod}}}%
+        {{hash=061d2c50d15908ec2d468b1ede990f11}{%
+           family={Yamada},
+           familyi={Y\bibinitperiod},
+           given={Kazunori\bibnamedelima D.},
+           giveni={K\bibinitperiod\bibinitdelim D\bibinitperiod}}}%
+        {{hash=bfa7a2d94ad4f3db93377fff0d11d606}{%
+           family={Kolachalama},
+           familyi={K\bibinitperiod},
+           given={Vijaya\bibnamedelima B.},
+           giveni={V\bibinitperiod\bibinitdelim B\bibinitperiod}}}%
+        {{hash=5292ad7a965d3892e67bed1262d5e8a3}{%
+           family={Saligrama},
+           familyi={S\bibinitperiod},
+           given={Venkatesh},
+           giveni={V\bibinitperiod}}}%
+      }
+      \strng{namehash}{8350e47dd6b551491e15d746325efc25}
+      \strng{fullhash}{b3e36c2314c7f94e80d622579f559164}
+      \strng{fullhashraw}{b3e36c2314c7f94e80d622579f559164}
+      \strng{bibnamehash}{b3e36c2314c7f94e80d622579f559164}
+      \strng{authorbibnamehash}{b3e36c2314c7f94e80d622579f559164}
+      \strng{authornamehash}{8350e47dd6b551491e15d746325efc25}
+      \strng{authorfullhash}{b3e36c2314c7f94e80d622579f559164}
+      \strng{authorfullhashraw}{b3e36c2314c7f94e80d622579f559164}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Advances in Neural Information Processing Systems}
+      \field{note}{本地文献：NeurIPS 2023 InfoCD 论文}
+      \field{title}{{InfoCD}: A Contrastive Chamfer Distance Loss for Point Cloud Completion}
+      \field{volume}{36}
+      \field{year}{2023}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

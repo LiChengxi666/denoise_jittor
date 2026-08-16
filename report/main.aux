@@ -1,0 +1,118 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\abx@aux@refcontext{none/global//global/global/global}
+\HyPL@Entry{0<</S/D>>}
+\abx@aux@cite{0}{wang2026pcdsurvey}
+\abx@aux@segm{0}{0}{wang2026pcdsurvey}
+\abx@aux@cite{0}{hu2026lecture08}
+\abx@aux@segm{0}{0}{hu2026lecture08}
+\abx@aux@cite{0}{edirimuni2024straightpcf}
+\abx@aux@segm{0}{0}{edirimuni2024straightpcf}
+\abx@aux@cite{0}{hu2023mspoint}
+\abx@aux@segm{0}{0}{hu2023mspoint}
+\abx@aux@cite{0}{guan2025eiscd}
+\abx@aux@segm{0}{0}{guan2025eiscd}
+\@writefile{toc}{\contentsline {section}{\numberline {1}问题背景与任务定义}{4}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}输入、输出与数据限制}{4}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}评价指标}{4}{subsection.1.2}\protected@file@percent }
+\newlabel{eq:cd}{{1}{4}{评价指标}{equation.1}{}}
+\newlabel{eq:cd@cref}{{[equation][1][]1}{[1][4][]4}{}{}{}}
+\newlabel{eq:p2s}{{2}{4}{评价指标}{equation.2}{}}
+\newlabel{eq:p2s@cref}{{[equation][2][]2}{[1][4][]4}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}vm\_strong 代码框架与整体流程}{4}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Git 演化与默认入口}{4}{subsection.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces \texttt  {vm_strong} 相对 baseline 的主要 Git 节点（\texttt  {starter_code/}）。}}{5}{table.caption.2}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:git}{{1}{5}{\code {vm_strong} 相对 baseline 的主要 Git 节点（\code {starter_code/}）。}{table.caption.2}{}}
+\newlabel{tab:git@cref}{{[table][1][]1}{[1][4][]5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}配置化模块划分}{5}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}端到端数据流}{5}{subsection.2.3}\protected@file@percent }
+\abx@aux@cite{0}{wang2026pcdsurvey}
+\abx@aux@segm{0}{0}{wang2026pcdsurvey}
+\abx@aux@cite{0}{hu2024pointcloudtech}
+\abx@aux@segm{0}{0}{hu2024pointcloudtech}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces \texttt  {vm_strong} 训练、验证、推理与提交的整体数据流。虚线表示只在训练阶段使用的干净监督。}}{6}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:overview}{{1}{6}{\code {vm_strong} 训练、验证、推理与提交的整体数据流。虚线表示只在训练阶段使用的干净监督。}{figure.caption.3}{}}
+\newlabel{fig:overview@cref}{{[figure][1][]1}{[1][5][]6}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}模型结构}{6}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}动态边卷积特征提取}{6}{subsection.3.1}\protected@file@percent }
+\newlabel{eq:edgeconv}{{3}{6}{动态边卷积特征提取}{equation.3}{}}
+\newlabel{eq:edgeconv@cref}{{[equation][3][]3}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}全局—局部融合与位移解码}{6}{subsection.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces \texttt  {vm_strong} 模型结构。动态图在坐标与中间特征上逐层重建，全局特征与局部特征融合后预测逐点位移。}}{6}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:model}{{2}{6}{\code {vm_strong} 模型结构。动态图在坐标与中间特征上逐层重建，全局特征与局部特征融合后预测逐点位移。}{figure.caption.4}{}}
+\newlabel{fig:model@cref}{{[figure][2][]2}{[1][6][]6}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}训练策略}{6}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}网格采样与噪声合成}{6}{subsection.4.1}\protected@file@percent }
+\abx@aux@cite{0}{edirimuni2024straightpcf}
+\abx@aux@segm{0}{0}{edirimuni2024straightpcf}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}随机混合状态与位移监督}{7}{subsection.4.2}\protected@file@percent }
+\newlabel{eq:mix}{{4}{7}{随机混合状态与位移监督}{equation.4}{}}
+\newlabel{eq:mix@cref}{{[equation][4][]4}{[1][7][]7}{}{}{}}
+\newlabel{eq:target}{{5}{7}{随机混合状态与位移监督}{equation.5}{}}
+\newlabel{eq:target@cref}{{[equation][5][]5}{[1][7][]7}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}联合损失}{7}{subsection.4.3}\protected@file@percent }
+\newlabel{eq:loss}{{9}{7}{联合损失}{equation.9}{}}
+\newlabel{eq:loss@cref}{{[equation][9][]9}{[1][7][]7}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}推理与后处理}{7}{section.5}\protected@file@percent }
+\abx@aux@cite{0}{edirimuni2024straightpcf}
+\abx@aux@segm{0}{0}{edirimuni2024straightpcf}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces \texttt  {vm_strong} 整云 patch 推理与融合流程。两轮外部迭代均重新构造局部邻域。}}{8}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:inference}{{3}{8}{\code {vm_strong} 整云 patch 推理与融合流程。两轮外部迭代均重新构造局部邻域。}{figure.caption.5}{}}
+\newlabel{fig:inference@cref}{{[figure][3][]3}{[1][8][]8}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}技术贡献与工程改进}{8}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}实验结果与分析}{9}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}baseline 与 vm\_strong 配置对比}{9}{subsection.7.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces baseline 与 \texttt  {vm_strong} 路线的代码配置对比。该表是结构对照，不等同于单变量消融。}}{9}{table.caption.6}\protected@file@percent }
+\newlabel{tab:config}{{2}{9}{baseline 与 \code {vm_strong} 路线的代码配置对比。该表是结构对照，不等同于单变量消融。}{table.caption.6}{}}
+\newlabel{tab:config@cref}{{[table][2][]2}{[1][8][]9}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}云端训练、日志与选模流程}{9}{subsection.7.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces \texttt  {vm_strong} 云端训练、固定验证评测与本地提交流程。}}{9}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:cloud}{{4}{9}{\code {vm_strong} 云端训练、固定验证评测与本地提交流程。}{figure.caption.7}{}}
+\newlabel{fig:cloud@cref}{{[figure][4][]4}{[1][9][]9}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces 云端/本地实验产物与用途。}}{10}{table.caption.8}\protected@file@percent }
+\newlabel{tab:artifacts}{{3}{10}{云端/本地实验产物与用途。}{table.caption.8}{}}
+\newlabel{tab:artifacts@cref}{{[table][3][]3}{[1][9][]10}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}训练曲线与日志分析}{10}{subsection.7.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces \texttt  {vm_strong} 训练曲线：1--10 epoch 同步日志实线、已知 checkpoint 验证损失 锚点（菱形）与穿过锚点的拟合趋势线（训练至 epoch 80）。}}{10}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:curve}{{5}{10}{\code {vm_strong} 训练曲线：1--10 epoch 同步日志实线、已知 checkpoint 验证损失 锚点（菱形）与穿过锚点的拟合趋势线（训练至 epoch 80）。}{figure.caption.9}{}}
+\newlabel{fig:curve@cref}{{[figure][5][]5}{[1][10][]10}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces 各 checkpoint 已知验证加权损失（\texttt  {checkpoint_val_loss_known.csv}）。}}{11}{table.caption.10}\protected@file@percent }
+\newlabel{tab:trainlog}{{4}{11}{各 checkpoint 已知验证加权损失（\code {checkpoint_val_loss_known.csv}）。}{table.caption.10}{}}
+\newlabel{tab:trainlog@cref}{{[table][4][]4}{[1][10][]11}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}提交包完整性与最终成绩}{11}{subsection.7.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces 现存提交包格式审计。}}{12}{table.caption.11}\protected@file@percent }
+\newlabel{tab:audit}{{5}{12}{现存提交包格式审计。}{table.caption.11}{}}
+\newlabel{tab:audit@cref}{{[table][5][]5}{[1][11][]12}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces A 榜最终成绩（E9 提交，数据来源：比赛平台总排行，2026-06-28 22:05）。}}{12}{table.caption.12}\protected@file@percent }
+\newlabel{tab:score}{{6}{12}{A 榜最终成绩（E9 提交，数据来源：比赛平台总排行，2026-06-28 22:05）。}{table.caption.12}{}}
+\newlabel{tab:score@cref}{{[table][6][]6}{[1][12][]12}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces A 榜总排行截图（2026-06-28 22:05）：队伍 alpha奶龙 排名第 36，总分 74.16。}}{12}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:leaderboard}{{6}{12}{A 榜总排行截图（2026-06-28 22:05）：队伍 alpha奶龙 排名第 36，总分 74.16。}{figure.caption.13}{}}
+\newlabel{fig:leaderboard@cref}{{[figure][6][]6}{[1][12][]12}{}{}{}}
+\abx@aux@cite{0}{lin2023infocd}
+\abx@aux@segm{0}{0}{lin2023infocd}
+\abx@aux@cite{0}{guan2025eiscd}
+\abx@aux@segm{0}{0}{guan2025eiscd}
+\@writefile{toc}{\contentsline {section}{\numberline {8}局限、探索性分支与未来工作}{13}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}当前方案的局限}{13}{subsection.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}已实现但未作为最终方案的探索}{13}{subsection.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}队伍分工}{13}{section.9}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces 成员贡献表。}}{14}{table.caption.14}\protected@file@percent }
+\newlabel{tab:team}{{7}{14}{成员贡献表。}{table.caption.14}{}}
+\newlabel{tab:team@cref}{{[table][7][]7}{[1][13][]14}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10}总结}{14}{section.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A}复现实验与报告编译}{14}{appendix.A}\protected@file@percent }
+\newlabel{LastPage}{{A}{15}{复现实验与报告编译}{page.15}{}}
+\gdef\lastpage@lastpage{15}
+\gdef\lastpage@lastpageHy{15}
+\abx@aux@read@bbl@mdfivesum{E42A38F19692930FA274778F5B9AF894}
+\abx@aux@defaultrefcontext{0}{wang2026pcdsurvey}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{hu2026lecture08}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{edirimuni2024straightpcf}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{hu2023mspoint}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{guan2025eiscd}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{hu2024pointcloudtech}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{lin2023infocd}{none/global//global/global/global}
+\gdef \@abspage@last{15}

@@ -1,0 +1,59 @@
+\documentclass[tikz,border=5pt]{standalone}
+\usepackage[UTF8,fontset=fandol]{ctex}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\definecolor{navy}{HTML}{17365D}
+\definecolor{blue}{HTML}{5B9BD5}
+\definecolor{green}{HTML}{70AD47}
+\definecolor{orange}{HTML}{ED7D31}
+\definecolor{graybox}{HTML}{F2F2F2}
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  node distance=7mm and 7mm,
+  box/.style={draw=navy,rounded corners=2pt,thick,align=center,minimum height=10mm,minimum width=27mm,fill=graybox},
+  train/.style={box,fill=blue!16},
+  infer/.style={box,fill=green!15},
+  result/.style={box,fill=orange!16},
+  arr/.style={-{Latex[length=2.2mm]},thick,draw=navy},
+  supervise/.style={-{Latex[length=2.2mm]},thick,dashed,draw=orange}
+]
+\node[train] (mesh) {训练干净网格\\ShapeNet OBJ};
+\node[train,right=of mesh] (sample) {表面采样与法向\\32,768 点};
+\node[train,right=of sample] (aug) {归一化、加噪\\旋转与缩放};
+\node[train,right=of aug] (patch) {局部 patch\\$4\times1200$};
+\node[train,right=of patch] (mix) {随机混合状态\\$P_t=tP_B+(1-t)P_A$};
+\node[result,right=of mix] (model) {VelocityModule\\EdgeConv＋位移解码};
+\node[train,below=10mm of model] (loss) {联合几何损失\\Disp＋CD＋Plane＋Reg};
+\node[result,right=of model] (ckpt) {验证与选模\\checkpoint};
+
+\draw[arr] (mesh)--(sample);
+\draw[arr] (sample)--(aug);
+\draw[arr] (aug)--(patch);
+\draw[arr] (patch)--(mix);
+\draw[arr] (mix)--(model);
+\draw[supervise] (patch.south) |- (loss.west);
+\draw[arr] (model)--(ckpt);
+\draw[arr] (model)--(loss);
+
+\node[infer,below=23mm of mesh] (noisy) {测试 noisy.npy\\原始 50,000 点};
+\node[infer,right=of noisy] (empty) {空预测增强\\保持原坐标与点数};
+\node[infer,right=of empty] (split) {FPS＋KNN\\重叠 patch};
+\node[result,right=of split] (loaded) {加载选定权重\\局部迭代去噪};
+\node[infer,right=of loaded] (fuse) {距离加权融合\\两轮整云更新};
+\node[result,right=of fuse] (write) {denoised.npy\\shape/dtype/finite 检查};
+\node[result,right=of write] (zip) {result.zip\\根目录 shapenet/};
+
+\draw[arr] (noisy)--(empty);
+\draw[arr] (empty)--(split);
+\draw[arr] (split)--(loaded);
+\draw[arr] (loaded)--(fuse);
+\draw[arr] (fuse)--(write);
+\draw[arr] (write)--(zip);
+\draw[arr] (ckpt.south) |- (loaded.north);
+
+\begin{scope}[on background layer]
+  \node[draw=blue!65,rounded corners=4pt,fit=(mesh)(loss)(ckpt),inner sep=5pt,label={[blue!70!black]above:训练与选模}] {};
+  \node[draw=green!60!black,rounded corners=4pt,fit=(noisy)(zip),inner sep=5pt,label={[green!50!black]below:推理、检查与提交}] {};
+\end{scope}
+\end{tikzpicture}
+\end{document}
