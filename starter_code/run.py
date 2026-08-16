@@ -49,6 +49,10 @@ if __name__ == "__main__":
     parser.add_argument("--log_dir", type=str, required=False, default=None)
     parser.add_argument("--experiment_name", type=str, required=False, default=None)
     parser.add_argument("--ckpt_dir", type=str, required=False, default=None)
+    parser.add_argument("--load_ckpt", type=str, required=False, default=None)
+    parser.add_argument("--writer_save_dir", type=str, required=False, default=None)
+    parser.add_argument("--writer_save_name", type=str, required=False, default=None)
+    parser.add_argument("--epochs", type=int, required=False, default=None)
     args = parser.parse_args()
     
     # seed all
@@ -123,15 +127,25 @@ if __name__ == "__main__":
         trainer_config['log_dir'] = args.log_dir
     if args.experiment_name is not None:
         trainer_config['experiment_name'] = args.experiment_name
+    if args.epochs is not None:
+        trainer_config['epochs'] = args.epochs
     
     # load ckpt
     load_ckpt = task.get('load_ckpt', None)
+    if args.load_ckpt is not None:
+        load_ckpt = args.load_ckpt
     
     if load_ckpt is not None and model is not None:
         model.load(load_ckpt)
     
     # get writer
     writer_config = task.get('writer', None)
+    if writer_config is not None:
+        writer_config = copy.deepcopy(writer_config)
+        if args.writer_save_dir is not None:
+            writer_config['save_dir'] = args.writer_save_dir
+        if args.writer_save_name is not None:
+            writer_config['save_name'] = args.writer_save_name
     
     # get system
     system_config = components.get('system', None)
