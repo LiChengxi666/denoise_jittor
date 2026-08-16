@@ -8,6 +8,10 @@ import json
 import jittor as jt
 import math
 import os
+import re
+import shutil
+import subprocess
+import sys
 import time
 
 from ..data.asset import Asset
@@ -30,6 +34,66 @@ def _jsonable(x):
     if isinstance(x, (str, int, float, bool)) or x is None:
         return x
     return str(x)
+
+def _tail(text: str, n: int=1600) -> str:
+    if not text:
+        return ""
+    return text[-n:].replace("\n", "\\n")
+
+def _parse_float(output: str, patterns: List[str]):
+    for pattern in patterns:
+        match = re.search(pattern, output)
+        if match:
+            return float(match.group(1))
+    return None
+
+def _parse_eval_metrics(output: str) -> Dict[str, Optional[float]]:
+    return {
+        "score": _parse_float(output, [
+            r"最终得分.*?([0-9]+(?:\.[0-9]+)?)\s*/\s*100",
+            r"final_score\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "cd_score": _parse_float(output, [
+            r"CD 得分:\s*([0-9]+(?:\.[0-9]+)?)\s*/\s*100",
+            r"CD_score\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "p2s_score": _parse_float(output, [
+            r"P2S 得分:\s*([0-9]+(?:\.[0-9]+)?)\s*/\s*100",
+            r"P2S_score\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_pred": _parse_float(output, [
+            r"平均 CD_pred:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_pred\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_noisy": _parse_float(output, [
+            r"平均 CD_noisy:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_noisy\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_pred_to_gt": _parse_float(output, [
+            r"平均 CD_pred_to_gt:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_pred_to_gt\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_gt_to_pred": _parse_float(output, [
+            r"平均 CD_gt_to_pred:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_gt_to_pred\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_noisy_to_gt": _parse_float(output, [
+            r"平均 CD_noisy_to_gt:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_noisy_to_gt\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_cd_gt_to_noisy": _parse_float(output, [
+            r"平均 CD_gt_to_noisy:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_cd_gt_to_noisy\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_p2s_pred": _parse_float(output, [
+            r"平均 P2S_pred:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_p2s_pred\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+        "mean_p2s_noisy": _parse_float(output, [
+            r"平均 P2S_noisy:\s*([0-9]+(?:\.[0-9]+)?)",
+            r"mean_p2s_noisy\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        ]),
+    }
 
 def get_optimizer(optimizer_config, model):
     optimizer_config = dict(optimizer_config)
@@ -150,6 +214,7 @@ class DummySystem():
         self.log_every_n_steps = trainer_config.get('log_every_n_steps', 0)
         self.lr_scheduler_config = trainer_config.get('lr_scheduler', None)
         self.grad_clip_norm = trainer_config.get('grad_clip_norm', None)
+        self.periodic_eval_config = trainer_config.get('periodic_eval', None)
         self.best_validation_loss = math.inf
         self.base_lr = None if optimizer_config is None else optimizer_config.get('lr', None)
         self.current_lr = self.base_lr
@@ -180,6 +245,126 @@ class DummySystem():
             f"save_last_every={self.save_last_every}, validate_every={self.validate_every}, "
             f"base_lr={self.base_lr}, ckpt_dir={self.ckpt_save_dir}"
         )
+
+    def _should_run_periodic_eval(self, epoch: int) -> bool:
+        cfg = self.periodic_eval_config
+        if not cfg or not cfg.get("enabled", False):
+            return False
+        every = int(cfg.get("every", 0) or 0)
+        if every <= 0:
+            return False
+        start_epoch = int(cfg.get("start_epoch", every) or every)
+        epoch_one_based = epoch + 1
+        return epoch_one_based >= start_epoch and (
+            epoch_one_based % every == 0 or epoch_one_based == self.epochs
+        )
+
+    def _run_subprocess(self, cmd: List[str]) -> tuple[int, str]:
+        proc = subprocess.run(
+            cmd,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        return proc.returncode, proc.stdout
+
+    def _run_periodic_eval(self, epoch: int, checkpoint_path: Optional[str]) -> Dict:
+        cfg = self.periodic_eval_config or {}
+        epoch_one_based = epoch + 1
+        prefix = cfg.get("metric_prefix", "eval")
+        row = {
+            f"{prefix}/epoch": epoch_one_based,
+            f"{prefix}/status": "skipped",
+        }
+        if not checkpoint_path:
+            row[f"{prefix}/failure_tail"] = "no checkpoint path available"
+            self.logger.log_text(f"Periodic eval skipped at epoch {epoch_one_based}: no checkpoint path")
+            return row
+
+        task = cfg.get("task")
+        if not task:
+            row[f"{prefix}/failure_tail"] = "periodic_eval.task is required"
+            self.logger.log_text(f"Periodic eval skipped at epoch {epoch_one_based}: missing task")
+            return row
+
+        experiment = cfg.get("experiment_name", os.path.basename(os.path.normpath(self.ckpt_save_dir)) or "default")
+        pred_root = cfg.get("pred_root", "tmp_periodic_eval")
+        pred_dir = cfg.get("pred_dir", os.path.join(pred_root, experiment, f"epoch_{epoch_one_based:04d}"))
+        csv_dir = cfg.get("csv_dir", os.path.join("diagnostics", "periodic_eval", experiment))
+        eval_csv = cfg.get("csv_path", os.path.join(csv_dir, f"epoch_{epoch_one_based:04d}.csv"))
+
+        run_cmd = [
+            sys.executable,
+            "run.py",
+            "--task",
+            task,
+            "--load_ckpt",
+            checkpoint_path,
+            "--writer_save_dir",
+            pred_dir,
+        ]
+        self.logger.log_text(
+            f"Periodic eval predict start: epoch={epoch_one_based}, ckpt={checkpoint_path}, pred_dir={pred_dir}"
+        )
+        pred_code, pred_out = self._run_subprocess(run_cmd)
+        if pred_code != 0:
+            row[f"{prefix}/status"] = "predict_failed"
+            row[f"{prefix}/checkpoint"] = checkpoint_path
+            row[f"{prefix}/pred_dir"] = pred_dir
+            row[f"{prefix}/failure_tail"] = _tail(pred_out)
+            self.logger.log_text(f"Periodic eval predict failed: {_tail(pred_out)}")
+            if cfg.get("fail_on_error", False):
+                raise RuntimeError(pred_out)
+            return row
+
+        eval_cmd = [
+            sys.executable,
+            "evaluate.py",
+            "--pred_dir",
+            pred_dir,
+            "--gt_dir",
+            cfg.get("gt_dir", "val_gt"),
+            "--noisy_dir",
+            cfg.get("noisy_dir", "val_noisy"),
+            "--workers",
+            str(cfg.get("workers", 8)),
+            "--csv_path",
+            eval_csv,
+        ]
+        mesh_dir = cfg.get("mesh_dir", "")
+        if mesh_dir:
+            eval_cmd.extend(["--mesh_dir", mesh_dir])
+        p2s_normalize = cfg.get("p2s_normalize", "meta")
+        eval_cmd.extend(["--p2s_normalize", p2s_normalize])
+        if p2s_normalize == "meta":
+            eval_cmd.extend(["--meta_dir", cfg.get("meta_dir", "val_meta")])
+
+        self.logger.log_text(f"Periodic eval score start: epoch={epoch_one_based}, csv={eval_csv}")
+        eval_code, eval_out = self._run_subprocess(eval_cmd)
+        metrics = _parse_eval_metrics(eval_out)
+        row.update({
+            f"{prefix}/status": "ok" if eval_code == 0 and metrics["score"] is not None else "eval_failed",
+            f"{prefix}/checkpoint": checkpoint_path,
+            f"{prefix}/pred_dir": "" if not cfg.get("keep_predictions", False) else pred_dir,
+            f"{prefix}/csv_path": eval_csv,
+            f"{prefix}/p2s_normalize": p2s_normalize,
+        })
+        for name, value in metrics.items():
+            if value is not None:
+                row[f"{prefix}/{name}"] = value
+        if row[f"{prefix}/status"] != "ok":
+            row[f"{prefix}/failure_tail"] = _tail(pred_out + "\n" + eval_out)
+            self.logger.log_text(f"Periodic eval failed: {_tail(pred_out + chr(10) + eval_out)}")
+            if cfg.get("fail_on_error", False):
+                raise RuntimeError(eval_out)
+        else:
+            self.logger.log_text(
+                f"Periodic eval ok: epoch={epoch_one_based}, "
+                f"score={metrics['score']}, cd={metrics['cd_score']}, p2s={metrics['p2s_score']}"
+            )
+        if not cfg.get("keep_predictions", False):
+            shutil.rmtree(pred_dir, ignore_errors=True)
+        return row
 
     def _checkpoint_path(self, name: str) -> str:
         return os.path.join(self.ckpt_save_dir, f'{name}.pkl')
@@ -435,9 +620,11 @@ class DummySystem():
             else:
                 mean_val_loss = None
             
+            epoch_checkpoint_path = None
             if self.save_last and self.save_last_every and self.save_last_every > 0 and ((epoch + 1) % self.save_last_every == 0 or epoch == self.epochs - 1):
                 self.last_checkpoint_path = self._checkpoint_path(f'{self.ckpt_save_name}_last')
                 self._save_checkpoint(self.last_checkpoint_path, 'last')
+                epoch_checkpoint_path = self.last_checkpoint_path
             if self.save_best and mean_val_loss is not None and mean_val_loss < self.best_validation_loss:
                 self.best_validation_loss = mean_val_loss
                 self.best_checkpoint_path = self._checkpoint_path(f'{self.ckpt_save_name}_best')
@@ -445,6 +632,15 @@ class DummySystem():
             if self.save_every and self.save_every > 0 and ((epoch + 1) % self.save_every == 0 or epoch == self.epochs - 1):
                 checkpoint_path = self._checkpoint_path(f'{self.ckpt_save_name}_{epoch}')
                 self._save_checkpoint(checkpoint_path, f'epoch {epoch}')
+                epoch_checkpoint_path = checkpoint_path
+
+            periodic_eval_summary = {}
+            if self._should_run_periodic_eval(epoch):
+                periodic_eval_summary = self._run_periodic_eval(
+                    epoch=epoch,
+                    checkpoint_path=epoch_checkpoint_path or self.last_checkpoint_path or self.best_checkpoint_path,
+                )
+
             epoch_seconds = time.time() - epoch_started_at
             elapsed_seconds = time.time() - self.training_started_at
             row = {
@@ -462,6 +658,7 @@ class DummySystem():
             }
             row.update(train_summary)
             row.update(val_summary)
+            row.update(periodic_eval_summary)
             last_row = dict(row)
             self.logger.write_metrics(row)
             self.logger.write_latest(row)
