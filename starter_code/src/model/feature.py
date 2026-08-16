@@ -145,6 +145,81 @@ class FeatureExtraction(nn.Module):
 
         return x3
 
+class ChannelAttention(nn.Module):
+    def __init__(self, channels, reduction=4):
+        super().__init__()
+        hidden = max(channels // reduction, 16)
+        self.mlp = nn.Sequential(
+            nn.Linear(channels, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, channels),
+        )
+    
+    def execute(self, x):
+        """
+        x: (B, N, F)
+        """
+        B, N, F = x.shape
+        mean_pool = x.mean(dim=1)
+        max_pool = jt.max(x, dim=1)
+        gate = jt.sigmoid(self.mlp(mean_pool) + self.mlp(max_pool))
+        gate = gate.reshape(B, 1, F).broadcast((B, N, F))
+        return x * gate
+
+class MultiScaleFeatureExtraction(nn.Module):
+    def __init__(
+        self,
+        knns=(16, 24, 40),
+        input_dim=3,
+        embedding_dim=384,
+        branch_dim=None,
+        distance_estimation=False,
+        global_feat=False,
+        channel_attention=True,
+    ):
+        super().__init__()
+        
+        if branch_dim is None:
+            branch_dim = max(64, embedding_dim // 2)
+        
+        self.knns = list(knns)
+        self.input_dim = input_dim
+        self.embedding_dim = embedding_dim
+        self.branch_dim = branch_dim
+        self.global_feat = global_feat
+        self.output_dim = embedding_dim * (2 if global_feat else 1)
+        
+        self.branch_names = []
+        for i, k in enumerate(self.knns):
+            name = f"branch_{i}"
+            setattr(self, name, FeatureExtraction(
+                k=k,
+                input_dim=input_dim,
+                embedding_dim=branch_dim,
+                distance_estimation=distance_estimation,
+                global_feat=False,
+            ))
+            self.branch_names.append(name)
+        self.fuse = nn.Sequential(
+            nn.Linear(branch_dim * len(self.knns), embedding_dim),
+            nn.ReLU(),
+        )
+        self.channel_attention = ChannelAttention(embedding_dim) if channel_attention else None
+    
+    def execute(self, x):
+        feats = [getattr(self, name)(x) for name in self.branch_names]
+        feat = jt.concat(feats, dim=-1)
+        B, N, _ = feat.shape
+        feat = self.fuse(feat.reshape(B * N, -1)).reshape(B, N, self.embedding_dim)
+        if self.channel_attention is not None:
+            feat = self.channel_attention(feat)
+        
+        if self.global_feat:
+            feat_global = jt.max(feat, dim=1, keepdims=True)
+            feat_global = feat_global.broadcast((feat.shape[0], feat.shape[1], feat.shape[2]))
+            feat = jt.concat([feat, feat_global], dim=-1)
+        return feat
+
 class Decoder(nn.Module):
     
     def __init__(self, z_dim, dim, out_dim, hidden_size):
