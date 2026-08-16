@@ -1,0 +1,4 @@
+__target__: vm
+
+ckpt_save_dir: experiments/vm_strong_cd04_indclean1600
+ckpt_save_name: checkpoint

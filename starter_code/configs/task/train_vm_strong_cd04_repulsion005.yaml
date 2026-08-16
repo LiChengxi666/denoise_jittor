@@ -1,0 +1,53 @@
+mode: train
+debug: False
+
+components:
+  data: train_strong
+  transform: vm_strong_clean1600
+  system: vm_strong_cd04_repulsion005
+  model: vm_strong_repulsion
+
+loss:
+  disp_loss: 1.0
+  cd_loss: 0.4
+  point_plane_loss: 0.3
+  offset_reg: 0.01
+  repulsion_loss: 0.005
+
+optimizer:
+  __target__: adam
+  lr: 0.00003
+
+trainer:
+  epochs: 150
+  save_every: 10
+  save_best: True
+  save_last: True
+  save_last_every: 1
+  validate_every: 1
+  log_dir: logs
+  experiment_name: vm_strong_cd04_repulsion005
+  log_to_file: True
+  metrics_csv: metrics.csv
+  log_config: True
+  log_every_n_steps: 0
+  grad_clip_norm: 1.0
+  lr_scheduler:
+    __target__: cosine
+    warmup_epochs: 5
+    min_lr: 0.000003
+  periodic_eval:
+    enabled: True
+    every: 10
+    start_epoch: 10
+    task: configs/task/predict_val.yaml
+    gt_dir: val_gt
+    noisy_dir: val_noisy
+    mesh_dir: ../dataset_train
+    meta_dir: val_meta
+    p2s_normalize: meta
+    workers: 8
+    pred_root: tmp_periodic_eval
+    csv_dir: diagnostics/periodic_eval/vm_strong_cd04_repulsion005
+    keep_predictions: False
+    fail_on_error: False
